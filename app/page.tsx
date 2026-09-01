@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { supabase } from '@/lib/supabase';
+import { supabase } from '../lib/supabase';
 //teste 
 export default function Home() {
   const [leads, setLeads] = useState<any[]>([]);
