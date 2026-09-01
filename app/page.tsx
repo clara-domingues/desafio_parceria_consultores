@@ -3,6 +3,8 @@
 import { useEffect, useState } from 'react';
 import { supabase } from '../lib/supabase';
 
+export const dynamic = 'force-dynamic';
+
 interface Lead {
   id?: string | number;
   [key: string]: unknown;
@@ -14,9 +16,6 @@ export default function Home() {
 
   useEffect(() => {
     async function fetchLeads() {
-      // Garante que só executa no navegador
-      if (typeof window === 'undefined') return;
-
       try {
         const { data, error } = await supabase.from('leads').select('*');
         if (error) {
