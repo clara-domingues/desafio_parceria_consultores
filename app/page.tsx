@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { supabase } from '../lib/supabase';
+import { createClient } from '@supabase/supabase-js';
 
 export const dynamic = 'force-dynamic';
 
@@ -16,18 +16,22 @@ export default function Home() {
 
   useEffect(() => {
     async function fetchLeads() {
-      try {
-        const { data, error } = await supabase.from('leads').select('*');
-        if (error) {
-          console.error('Erro ao buscar leads:', error.message);
-          setError(error.message);
-        } else {
-          console.log('Leads retornados do Supabase:', data);
-          setLeads((data as Lead[]) || []);
-        }
-      } catch (err: unknown) {
-        const message = err instanceof Error ? err.message : 'Erro desconhecido';
-        setError(message);
+      const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
+      const key = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+
+      if (!url || !key) {
+        setError('Variáveis de ambiente do Supabase não encontradas.');
+        return;
+      }
+
+      const client = createClient(url, key);
+      const { data, error } = await client.from('leads').select('*');
+
+      if (error) {
+        console.error('Erro ao buscar leads:', error.message);
+        setError(error.message);
+      } else {
+        setLeads((data as Lead[]) || []);
       }
     }
 
