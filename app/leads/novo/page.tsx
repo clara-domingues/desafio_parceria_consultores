@@ -46,9 +46,21 @@ export default function NovoLeadPage() {
 
     const classificacao = classificarLead(formData);
 
+    // Trata campos vazios para enviar NULL ao Supabase
+    const payload = {
+      ...formData,
+      previsao_fechamento: formData.previsao_fechamento || null,
+      valor_potencial: formData.valor_potencial || null,
+      empresa: formData.empresa || null,
+      telefone: formData.telefone || null,
+      origem: formData.origem || null,
+      status: "Novo",
+      classificacao,
+    };
+
     const { error } = await supabase
       .from("leads")
-      .insert([{ ...formData, status: "Novo", classificacao }])
+      .insert([payload])
       .select()
       .single();
 

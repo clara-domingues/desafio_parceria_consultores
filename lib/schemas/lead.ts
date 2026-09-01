@@ -9,7 +9,10 @@ export const leadSchema = z.object({
     .union([z.number(), z.string().transform((val) => (val === "" ? undefined : Number(val)))])
     .optional(),
   origem: z.string().optional(),
-  previsao_fechamento: z.string().optional(),
+  previsao_fechamento: z
+    .string()
+    .optional()
+    .transform((val) => (val === "" ? undefined : val)),
   observacoes: z.string().optional(),
 });
 
