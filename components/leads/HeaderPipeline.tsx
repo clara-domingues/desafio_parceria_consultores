@@ -1,12 +1,10 @@
 "use client";
 
 import { useState } from "react";
-import { useRouter } from "next/navigation";
 import NovoLeadModal from "@/components/leads/NovoLeadModal";
 
 export default function HeaderPipeline() {
   const [modalAberto, setModalAberto] = useState(false);
-  const router = useRouter();
 
   return (
     <div className="flex justify-between items-center">
@@ -27,7 +25,6 @@ export default function HeaderPipeline() {
       <NovoLeadModal
         isOpen={modalAberto}
         onClose={() => setModalAberto(false)}
-        onLeadCriado={() => router.refresh()}
       />
     </div>
   );

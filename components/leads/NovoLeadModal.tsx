@@ -1,12 +1,12 @@
 "use client";
 
 import { useState } from "react";
-import { supabase } from "@/lib/supabase";
+import { useLeads } from "@/contexts/LeadsContext";
 
 interface NovoLeadModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onLeadCriado: () => void;
+  onLeadCriado?: () => void;
 }
 
 export default function NovoLeadModal({
@@ -14,6 +14,7 @@ export default function NovoLeadModal({
   onClose,
   onLeadCriado,
 }: NovoLeadModalProps) {
+  const { addLead } = useLeads();
   const [loading, setLoading] = useState(false);
   const [formData, setFormData] = useState({
     nome_contato: "",
@@ -30,39 +31,41 @@ export default function NovoLeadModal({
     e.preventDefault();
     setLoading(true);
 
-    const { error } = await supabase.from("leads").insert([
-      {
+    try {
+      const valorNum = formData.valor_potencial
+        ? parseFloat(formData.valor_potencial)
+        : 0;
+
+      await addLead({
         nome_contato: formData.nome_contato,
-        empresa: formData.empresa || null,
+        empresa: formData.empresa || "",
         email: formData.email,
-        telefone: formData.telefone || null,
         origem: formData.origem,
-        valor_potencial: formData.valor_potencial
-          ? parseFloat(formData.valor_potencial)
-          : 0,
+        valor: valorNum,
+        valor_potencial: valorNum,
         status: "Novo",
-      },
-    ]);
+        responsavel_id: null,
+        classificacao: null,
+        classificacao_motivo: null,
+      });
 
-    setLoading(false);
+      setFormData({
+        nome_contato: "",
+        empresa: "",
+        email: "",
+        telefone: "",
+        origem: "Outro",
+        valor_potencial: "",
+      });
 
-    if (error) {
+      if (onLeadCriado) onLeadCriado();
+      onClose();
+    } catch (error) {
       console.error("Erro ao criar lead:", error);
       alert("Erro ao cadastrar lead. Verifique os dados.");
-      return;
+    } finally {
+      setLoading(false);
     }
-
-    setFormData({
-      nome_contato: "",
-      empresa: "",
-      email: "",
-      telefone: "",
-      origem: "Outro",
-      valor_potencial: "",
-    });
-
-    onLeadCriado();
-    onClose();
   };
 
   return (

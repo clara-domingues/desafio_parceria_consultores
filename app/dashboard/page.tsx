@@ -19,6 +19,7 @@ interface Lead {
   id: string;
   status: string | null;
   valor_potencial: number | null;
+  valor?: number | null;
   origem: string | null;
 }
 
@@ -27,40 +28,61 @@ const COLORS = ["#3b82f6", "#10b981", "#f59e0b", "#ef4444", "#8b5cf6", "#ec4899"
 export default function DashboardPage() {
   const [leads, setLeads] = useState<Lead[]>([]);
   const [loading, setLoading] = useState(true);
+  const [mounted, setMounted] = useState(false);
 
   useEffect(() => {
+    let active = true;
+
+    requestAnimationFrame(() => {
+      if (active) setMounted(true);
+    });
+
     async function fetchLeads() {
-      console.log("[Dashboard] Iniciando query para tabela leads");
-      const query = supabase.from("leads").select("*");
-      console.log("[Dashboard] Query construída:", query);
+      const { data, error } = await supabase.from("leads").select("*");
 
-      const { data, error } = await query;
-      console.log("[Dashboard] Resposta da query:", { data, error });
+      if (!active) return;
 
-      if (!error && data) {
+      if (error) {
+        console.error("[Dashboard] Erro ao buscar leads:", error);
+      } else if (data) {
         setLeads(data);
       }
       setLoading(false);
     }
+
     fetchLeads();
+
+    return () => {
+      active = false;
+    };
   }, []);
 
   if (loading) {
-    return <div className="p-8 text-zinc-400">Carregando dados do dashboard...</div>;
+    return (
+      <main className="min-h-screen bg-black text-white p-8 flex items-center justify-center">
+        <div className="text-zinc-400 font-medium">Carregando dados do dashboard...</div>
+      </main>
+    );
   }
 
   // Métricas Principais (KPIs)
   const totalLeads = leads.length;
-  const totalValorPipeline = leads.reduce((acc, lead) => acc + (lead.valor_potencial || 0), 0);
-  
+  const totalValorPipeline = leads.reduce(
+    (acc, lead) => acc + (lead.valor_potencial ?? lead.valor ?? 0),
+    0
+  );
+
   const leadsGanhos = leads.filter((l) => l.status === "Ganho");
-  const totalValorGanhos = leadsGanhos.reduce((acc, lead) => acc + (lead.valor_potencial || 0), 0);
-  
+  const totalValorGanhos = leadsGanhos.reduce(
+    (acc, lead) => acc + (lead.valor_potencial ?? lead.valor ?? 0),
+    0
+  );
+
   const taxaConversao = totalLeads > 0 ? ((leadsGanhos.length / totalLeads) * 100).toFixed(1) : "0";
   const ticketMedio = leadsGanhos.length > 0 ? totalValorGanhos / leadsGanhos.length : 0;
 
-  // Dados para o Gráfico 1: Leads por Etapa
-  const etapas = ["Novo", "Qualificação", "Proposta", "Negociação", "Ganho", "Perdido"];
+  // Dados para o Gráfico 1: Leads por Etapa (Garantindo alinhamento com as colunas do Kanban)
+  const etapas = ["Novo", "Qualificacao", "Proposta", "Negociacao", "Ganho", "Perdido"];
   const dadosPorEtapa = etapas.map((etapa) => ({
     etapa,
     quantidade: leads.filter((l) => (l.status || "Novo") === etapa).length,
@@ -144,7 +166,7 @@ export default function DashboardPage() {
         </div>
 
         {/* Gráficos */}
-        {typeof window !== "undefined" && (
+        {mounted && (
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
             {/* Gráfico 1: Leads por Etapa */}
             <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-6">

@@ -1,55 +1,46 @@
-import Link from "next/link";
+"use client";
 
-interface Lead {
-  id: string;
-  nome_contato: string;
-  empresa: string | null;
-  status: string;
-  classificacao: "Quente" | "Morno" | "Frio" | null;
-  valor_potencial: number;
-  data_entrada?: string;
-  usuarios?: { nome: string } | null;
+import Link from "next/link";
+import { Lead } from "@/contexts/LeadsContext";
+
+interface LeadsTableProps {
+  leads: Lead[];
 }
 
-const corClassificacao: Record<string, string> = {
-  Quente: "text-red-400",
-  Morno: "text-amber-400",
-  Frio: "text-blue-400",
-};
-
-export default function LeadsTable({ leads }: { leads: Lead[] }) {
+export default function LeadsTable({ leads }: LeadsTableProps) {
   return (
-    <div className="overflow-x-auto">
-      <table className="w-full text-sm text-left">
-        <thead>
-          <tr className="text-zinc-500 border-b border-zinc-800">
-            <th className="py-2 pr-4">Nome</th>
-            <th className="py-2 pr-4">Empresa</th>
-            <th className="py-2 pr-4">Status</th>
-            <th className="py-2 pr-4">Classificação</th>
-            <th className="py-2 pr-4">Valor</th>
-            <th className="py-2 pr-4">Responsável</th>
+    <div className="overflow-x-auto rounded-lg border border-zinc-800 bg-zinc-900">
+      <table className="w-full text-left text-sm text-zinc-300">
+        <thead className="bg-zinc-950 text-xs uppercase text-zinc-400 border-b border-zinc-800">
+          <tr>
+            <th className="px-4 py-3">Contato</th>
+            <th className="px-4 py-3">Empresa</th>
+            <th className="px-4 py-3">Status</th>
+            <th className="px-4 py-3">Classificação</th>
+            <th className="px-4 py-3">Valor</th>
+            <th className="px-4 py-3">Responsável</th>
           </tr>
         </thead>
-        <tbody>
-          {leads.map((lead) => (
-            <tr key={lead.id} className="border-b border-zinc-900 hover:bg-zinc-900/50">
-              <td className="py-2 pr-4">
-                <Link href={`/leads/${lead.id}`} className="text-white hover:underline">
-                  {lead.nome_contato}
-                </Link>
-              </td>
-              <td className="py-2 pr-4 text-zinc-400">{lead.empresa ?? "—"}</td>
-              <td className="py-2 pr-4 text-zinc-400">{lead.status}</td>
-              <td className={`py-2 pr-4 ${lead.classificacao ? corClassificacao[lead.classificacao] : "text-zinc-600"}`}>
-                {lead.classificacao ?? "—"}
-              </td>
-              <td className="py-2 pr-4 text-zinc-400">
-                R$ {Number(lead.valor_potencial).toLocaleString("pt-BR")}
-              </td>
-              <td className="py-2 pr-4 text-zinc-400">{lead.usuarios?.nome ?? "—"}</td>
-            </tr>
-          ))}
+        <tbody className="divide-y divide-zinc-800">
+          {leads.map((lead) => {
+            const valorExibido = lead.valor_potencial ?? lead.valor ?? 0;
+            return (
+              <tr key={lead.id} className="hover:bg-zinc-800/50 transition">
+                <td className="px-4 py-3 font-medium text-white">
+                  <Link href={`/leads/${lead.id}`} className="hover:underline">
+                    {lead.nome_contato}
+                  </Link>
+                </td>
+                <td className="px-4 py-3">{lead.empresa || "-"}</td>
+                <td className="px-4 py-3">{lead.status}</td>
+                <td className="px-4 py-3">{lead.classificacao || "-"}</td>
+                <td className="px-4 py-3">
+                  R$ {Number(valorExibido).toLocaleString("pt-BR")}
+                </td>
+                <td className="px-4 py-3">{lead.usuarios?.nome || "-"}</td>
+              </tr>
+            );
+          })}
         </tbody>
       </table>
     </div>

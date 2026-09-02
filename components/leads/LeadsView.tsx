@@ -4,21 +4,12 @@ import { useState } from "react";
 import Link from "next/link";
 import { DragDropContext, Droppable, Draggable, DropResult } from "@hello-pangea/dnd";
 import { supabase } from "@/lib/supabase";
+import { useLeads, Lead as ContextLead } from "@/contexts/LeadsContext";
 import LeadsTable from "./LeadsTable";
 
-interface Lead {
-  id: string;
-  nome_contato: string;
-  empresa: string | null;
-  email: string;
-  origem: string;
-  status: string;
-  classificacao: "Quente" | "Morno" | "Frio" | null;
-  classificacao_motivo: string | null;
-  valor_potencial: number;
-  responsavel_id: string | null;
-  atualizado_em: string;
+export interface Lead extends Omit<ContextLead, "usuarios" | "valor"> {
   usuarios?: { nome: string } | null;
+  valor?: number;
 }
 
 const COLUNAS = ["Novo", "Qualificacao", "Proposta", "Negociacao", "Ganho", "Perdido"];
@@ -38,66 +29,76 @@ const CORES_CLASSIFICACAO: Record<string, string> = {
   Frio: "bg-blue-500/15 text-blue-400 border border-blue-500/30",
 };
 
-function diasSemAtualizacao(atualizadoEm: string): number {
+function diasSemAtualizacao(atualizadoEm?: string): number {
+  if (!atualizadoEm) return 0;
   const ms = Date.now() - new Date(atualizadoEm).getTime();
   return Math.floor(ms / (1000 * 60 * 60 * 24));
 }
 
-export default function LeadsView({ leadsIniciais }: { leadsIniciais: Lead[] }) {
+interface LeadsViewProps {
+  leadsIniciais?: ContextLead[];
+}
+
+export default function LeadsView({ leadsIniciais }: LeadsViewProps) {
+  const { leads, updateLeadStatus, refreshLeads } = useLeads();
   const [visualizacao, setVisualizacao] = useState<"tabela" | "kanban">("kanban");
-  const [leads, setLeads] = useState<Lead[]>(leadsIniciais);
   const [reclassificandoId, setReclassificandoId] = useState<string | null>(null);
+
+  const listaLeads = ((leads && leads.length > 0) ? leads : (leadsIniciais || [])) as Lead[];
 
   async function onDragEnd(result: DropResult) {
     const { draggableId, destination, source } = result;
-    if (!destination || destination.droppableId === source.droppableId) return;
+    
+    // Se soltou fora de uma coluna ou no mesmo lugar exato
+    if (!destination || (destination.droppableId === source.droppableId && destination.index === source.index)) {
+      return;
+    }
 
     const novoStatus = destination.droppableId;
-    const lead = leads.find((l) => l.id === draggableId);
+    const lead = listaLeads.find((l) => l.id === draggableId);
     if (!lead) return;
 
     const statusAnterior = lead.status;
 
-    // Atualização otimista na tela
-    setLeads((prev) =>
-      prev.map((l) =>
-        l.id === draggableId
-          ? { ...l, status: novoStatus, atualizado_em: new Date().toISOString() }
-          : l
-      )
-    );
+    try {
+      // 1. Atualiza o status via Contexto (atualização no estado/Supabase)
+      await updateLeadStatus(draggableId, novoStatus);
 
-    await supabase
-      .from("leads")
-      .update({ status: novoStatus, atualizado_em: new Date().toISOString() })
-      .eq("id", draggableId);
-
-    await supabase.from("historico").insert({
-      lead_id: draggableId,
-      campo_alterado: "status",
-      valor_anterior: statusAnterior,
-      valor_novo: novoStatus,
-    });
-
-    // Automação de fechamento: dispara a conversão em cliente + notificação
-    if (novoStatus === "Ganho") {
-      await fetch("/api/converter-lead", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ leadId: draggableId }),
+      // 2. Registra histórico de mudança no Supabase
+      await supabase.from("historico").insert({
+        lead_id: draggableId,
+        campo_alterado: "status",
+        valor_anterior: statusAnterior,
+        valor_novo: novoStatus,
       });
+
+      // 3. Automação ao mover para "Ganho"
+      if (novoStatus === "Ganho") {
+        await fetch("/api/converter-lead", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ leadId: draggableId }),
+        });
+      }
+
+      // 4. Recarrega os dados do contexto para sincronização total das listas
+      if (refreshLeads) {
+        await refreshLeads();
+      }
+    } catch (error) {
+      console.error("Erro ao atualizar status do lead:", error);
     }
   }
 
-  // Automação de reclassificação: recalcula Quente/Morno/Frio sob demanda
   async function reclassificar(lead: Lead) {
     setReclassificandoId(lead.id);
     try {
+      const valorPotencial = lead.valor_potencial ?? lead.valor ?? 0;
       const resposta = await fetch("/api/classificar", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          valor_potencial: lead.valor_potencial,
+          valor_potencial: valorPotencial,
           origem: lead.origem,
         }),
       });
@@ -115,11 +116,9 @@ export default function LeadsView({ leadsIniciais }: { leadsIniciais: Lead[] }) 
         valor_novo: classificacao,
       });
 
-      setLeads((prev) =>
-        prev.map((l) =>
-          l.id === lead.id ? { ...l, classificacao, classificacao_motivo: justificativa } : l
-        )
-      );
+      if (refreshLeads) {
+        await refreshLeads();
+      }
     } finally {
       setReclassificandoId(null);
     }
@@ -147,12 +146,12 @@ export default function LeadsView({ leadsIniciais }: { leadsIniciais: Lead[] }) 
       </div>
 
       {visualizacao === "tabela" ? (
-        <LeadsTable leads={leads} />
+        <LeadsTable leads={listaLeads} />
       ) : (
         <DragDropContext onDragEnd={onDragEnd}>
           <div className="flex gap-4 overflow-x-auto pb-4 -mx-4 px-4 sm:mx-0 sm:px-0">
             {COLUNAS.map((coluna) => {
-              const leadsDaColuna = leads.filter((l) => l.status === coluna);
+              const leadsDaColuna = listaLeads.filter((l) => l.status === coluna);
               return (
                 <Droppable droppableId={coluna} key={coluna}>
                   {(provided, snapshot) => (
@@ -170,9 +169,11 @@ export default function LeadsView({ leadsIniciais }: { leadsIniciais: Lead[] }) 
                         </span>
                       </div>
 
-                      <div className="flex flex-col gap-2">
+                      <div className="flex flex-col gap-2 min-h-[100px]">
                         {leadsDaColuna.map((lead, index) => {
                           const estagnado = diasSemAtualizacao(lead.atualizado_em) >= 7;
+                          const valorExibido = lead.valor_potencial ?? lead.valor ?? 0;
+
                           return (
                             <Draggable draggableId={lead.id} index={index} key={lead.id}>
                               {(provided, snapshot) => (
@@ -207,7 +208,7 @@ export default function LeadsView({ leadsIniciais }: { leadsIniciais: Lead[] }) 
                                   )}
 
                                   <p className="text-xs text-zinc-400 mt-1.5">
-                                    R$ {Number(lead.valor_potencial).toLocaleString("pt-BR")}
+                                    R$ {Number(valorExibido).toLocaleString("pt-BR")}
                                   </p>
 
                                   {lead.usuarios?.nome && (
