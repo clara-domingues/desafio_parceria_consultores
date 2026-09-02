@@ -15,6 +15,8 @@ import {
   Cell,
 } from "recharts";
 
+export const dynamic = "force-dynamic";
+
 interface Lead {
   id: string;
   status: string | null;

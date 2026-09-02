@@ -5,6 +5,8 @@ import { useLeads } from "@/contexts/LeadsContext";
 import LeadsView from "@/components/leads/LeadsView";
 import { DashboardView } from "@/components/DashboardView";
 
+export const dynamic = "force-dynamic";
+
 export default function Home() {
   const { leads, loading } = useLeads();
   const [view, setView] = useState<"kanban" | "tabela" | "dashboard">("kanban");

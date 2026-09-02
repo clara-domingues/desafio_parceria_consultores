@@ -1,6 +1,7 @@
 "use client";
 
 import React, { createContext, useContext, useEffect, useState, ReactNode, useCallback } from "react";
+import { useSearchParams } from "next/navigation";
 import { supabase } from "@/lib/supabase";
 
 export interface Lead {
@@ -15,6 +16,7 @@ export interface Lead {
   valor?: number | null;
   origem?: string | null;
   classificacao?: string | null;
+  usuario_id?: string | null;
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   usuarios?: any;
   atualizado_em?: string | null;
@@ -37,8 +39,10 @@ const LeadsContext = createContext<LeadsContextType | undefined>(undefined);
 const statusEnumMap: Record<string, string> = {
   Novo: "Novo",
   Qualificacao: "Qualificação",
+  Qualificação: "Qualificação",
   Proposta: "Proposta",
   Negociacao: "Negociação",
+  Negociação: "Negociação",
   Ganho: "Ganho",
   Perdido: "Perdido",
 };
@@ -46,13 +50,56 @@ const statusEnumMap: Record<string, string> = {
 export function LeadsProvider({ children }: { children: ReactNode }) {
   const [leads, setLeads] = useState<Lead[]>([]);
   const [loading, setLoading] = useState(true);
+  const searchParams = useSearchParams();
 
   const fetchLeads = useCallback(async () => {
     try {
-      const { data, error } = await supabase
+      setLoading(true);
+
+      const busca = searchParams.get("busca");
+      const status = searchParams.get("status");
+      const origem = searchParams.get("origem");
+      const responsavel = searchParams.get("responsavel");
+      const dataInicio = searchParams.get("dataInicio");
+      const dataFim = searchParams.get("dataFim");
+
+      let query = supabase
         .from("leads")
         .select("*")
         .order("criado_em", { ascending: false });
+
+      // Filtro por Período
+      if (dataInicio) {
+        query = query.gte("criado_em", `${dataInicio}T00:00:00`);
+      }
+
+      if (dataFim) {
+        query = query.lte("criado_em", `${dataFim}T23:59:59`);
+      }
+
+      // Filtro por Status
+      if (status && status !== "todos") {
+        query = query.eq("status", statusEnumMap[status] || status);
+      }
+
+      // Filtro por Origem
+      if (origem && origem !== "todas") {
+        query = query.eq("origem", origem);
+      }
+
+      // Filtro por Responsável
+      if (responsavel && responsavel !== "todos") {
+        query = query.eq("usuario_id", responsavel);
+      }
+
+      // Filtro por Busca Textual
+      if (busca) {
+        query = query.or(
+          `nome.ilike.%${busca}%,email.ilike.%${busca}%,empresa.ilike.%${busca}%`
+        );
+      }
+
+      const { data, error } = await query;
 
       if (error) {
         console.error("Erro ao buscar leads:", error.message);
@@ -64,7 +111,7 @@ export function LeadsProvider({ children }: { children: ReactNode }) {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [searchParams]);
 
   useEffect(() => {
     let isMounted = true;
