@@ -4,13 +4,8 @@ import { useState } from "react";
 import Link from "next/link";
 import { DragDropContext, Droppable, Draggable, DropResult } from "@hello-pangea/dnd";
 import { supabase } from "@/lib/supabase";
-import { useLeads, Lead as ContextLead } from "@/contexts/LeadsContext";
+import { useLeads, Lead } from "@/contexts/LeadsContext";
 import LeadsTable from "./LeadsTable";
-
-export interface Lead extends Omit<ContextLead, "usuarios" | "valor"> {
-  usuarios?: { nome: string } | null;
-  valor?: number;
-}
 
 const COLUNAS = ["Novo", "Qualificacao", "Proposta", "Negociacao", "Ganho", "Perdido"];
 
@@ -29,14 +24,14 @@ const CORES_CLASSIFICACAO: Record<string, string> = {
   Frio: "bg-blue-500/15 text-blue-400 border border-blue-500/30",
 };
 
-function diasSemAtualizacao(atualizadoEm?: string): number {
+function diasSemAtualizacao(atualizadoEm?: string | null): number {
   if (!atualizadoEm) return 0;
   const ms = Date.now() - new Date(atualizadoEm).getTime();
   return Math.floor(ms / (1000 * 60 * 60 * 24));
 }
 
 interface LeadsViewProps {
-  leadsIniciais?: ContextLead[];
+  leadsIniciais?: Lead[];
 }
 
 export default function LeadsView({ leadsIniciais }: LeadsViewProps) {
@@ -44,12 +39,11 @@ export default function LeadsView({ leadsIniciais }: LeadsViewProps) {
   const [visualizacao, setVisualizacao] = useState<"tabela" | "kanban">("kanban");
   const [reclassificandoId, setReclassificandoId] = useState<string | null>(null);
 
-  const listaLeads = ((leads && leads.length > 0) ? leads : (leadsIniciais || [])) as Lead[];
+  const listaLeads = (leads && leads.length > 0) ? leads : (leadsIniciais || []);
 
   async function onDragEnd(result: DropResult) {
     const { draggableId, destination, source } = result;
-    
-    // Se soltou fora de uma coluna ou no mesmo lugar exato
+
     if (!destination || (destination.droppableId === source.droppableId && destination.index === source.index)) {
       return;
     }
@@ -61,10 +55,8 @@ export default function LeadsView({ leadsIniciais }: LeadsViewProps) {
     const statusAnterior = lead.status;
 
     try {
-      // 1. Atualiza o status via Contexto (atualização no estado/Supabase)
       await updateLeadStatus(draggableId, novoStatus);
 
-      // 2. Registra histórico de mudança no Supabase
       await supabase.from("historico").insert({
         lead_id: draggableId,
         campo_alterado: "status",
@@ -72,7 +64,6 @@ export default function LeadsView({ leadsIniciais }: LeadsViewProps) {
         valor_novo: novoStatus,
       });
 
-      // 3. Automação ao mover para "Ganho"
       if (novoStatus === "Ganho") {
         await fetch("/api/converter-lead", {
           method: "POST",
@@ -81,7 +72,6 @@ export default function LeadsView({ leadsIniciais }: LeadsViewProps) {
         });
       }
 
-      // 4. Recarrega os dados do contexto para sincronização total das listas
       if (refreshLeads) {
         await refreshLeads();
       }
@@ -123,6 +113,14 @@ export default function LeadsView({ leadsIniciais }: LeadsViewProps) {
       setReclassificandoId(null);
     }
   }
+
+  const getNomeUsuario = (usuarios: unknown): string | null => {
+    if (typeof usuarios === "object" && usuarios !== null && "nome" in usuarios) {
+      return String((usuarios as { nome?: unknown }).nome || "");
+    }
+    if (typeof usuarios === "string") return usuarios;
+    return null;
+  };
 
   return (
     <div>
@@ -173,6 +171,7 @@ export default function LeadsView({ leadsIniciais }: LeadsViewProps) {
                         {leadsDaColuna.map((lead, index) => {
                           const estagnado = diasSemAtualizacao(lead.atualizado_em) >= 7;
                           const valorExibido = lead.valor_potencial ?? lead.valor ?? 0;
+                          const nomeUsuario = getNomeUsuario(lead.usuarios);
 
                           return (
                             <Draggable draggableId={lead.id} index={index} key={lead.id}>
@@ -190,12 +189,12 @@ export default function LeadsView({ leadsIniciais }: LeadsViewProps) {
                                       href={`/leads/${lead.id}`}
                                       className="font-medium text-sm text-white hover:underline"
                                     >
-                                      {lead.nome_contato}
+                                      {lead.nome_contato || lead.nome || "Sem nome"}
                                     </Link>
                                     {lead.classificacao && (
                                       <span
                                         className={`text-[10px] px-1.5 py-0.5 rounded-full whitespace-nowrap ${
-                                          CORES_CLASSIFICACAO[lead.classificacao]
+                                          CORES_CLASSIFICACAO[lead.classificacao] || ""
                                         }`}
                                       >
                                         {lead.classificacao}
@@ -211,9 +210,9 @@ export default function LeadsView({ leadsIniciais }: LeadsViewProps) {
                                     R$ {Number(valorExibido).toLocaleString("pt-BR")}
                                   </p>
 
-                                  {lead.usuarios?.nome && (
+                                  {nomeUsuario && (
                                     <p className="text-[11px] text-zinc-500 mt-1">
-                                      {lead.usuarios.nome}
+                                      {nomeUsuario}
                                     </p>
                                   )}
 

@@ -1,6 +1,6 @@
 "use client";
 
-import React, { createContext, useContext, useEffect, useState, ReactNode } from "react";
+import React, { createContext, useContext, useEffect, useState, ReactNode, useCallback } from "react";
 import { supabase } from "@/lib/supabase";
 
 export interface Lead {
@@ -15,10 +15,12 @@ export interface Lead {
   valor?: number | null;
   origem?: string | null;
   classificacao?: string | null;
-  usuarios?: unknown | null;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  usuarios?: any;
   atualizado_em?: string | null;
   criado_em?: string | null;
-  [key: string]: unknown;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  [key: string]: any;
 }
 
 interface LeadsContextType {
@@ -45,7 +47,7 @@ export function LeadsProvider({ children }: { children: ReactNode }) {
   const [leads, setLeads] = useState<Lead[]>([]);
   const [loading, setLoading] = useState(true);
 
-  const fetchLeads = async () => {
+  const fetchLeads = useCallback(async () => {
     try {
       const { data, error } = await supabase
         .from("leads")
@@ -62,11 +64,18 @@ export function LeadsProvider({ children }: { children: ReactNode }) {
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
 
   useEffect(() => {
-    fetchLeads();
-  }, []);
+    let isMounted = true;
+    const loadData = async () => {
+      if (isMounted) await fetchLeads();
+    };
+    loadData();
+    return () => {
+      isMounted = false;
+    };
+  }, [fetchLeads]);
 
   const updateLeadStatus = async (id: string, newStatus: string) => {
     const statusFormatado = statusEnumMap[newStatus] || newStatus;
