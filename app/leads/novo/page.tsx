@@ -1,197 +1,66 @@
-"use client";
-
-import { useState } from "react";
-import { useForm } from "react-hook-form";
-import { zodResolver } from "@hookform/resolvers/zod";
-import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase";
-import { leadSchema, LeadFormData } from "@/lib/schemas/lead";
-import { classificarLead } from "@/lib/automations/classificacao";
+import LeadsView from "@/components/leads/LeadsView";
+import LeadsFilters from "@/components/leads/LeadsFilters";
 
-export default function NovoLeadPage() {
-  const router = useRouter();
-  const [duplicateWarning, setDuplicateWarning] = useState<string | null>(null);
-  const [submitting, setSubmitting] = useState(false);
+interface PageProps {
+  searchParams: Promise<{
+    busca?: string;
+    status?: string;
+    classificacao?: string;
+    origem?: string;
+  }>;
+}
 
-  const {
-    register,
-    handleSubmit,
-    formState: { errors },
-  } = useForm({
-    resolver: zodResolver(leadSchema),
-  });
+export default async function Page({ searchParams }: PageProps) {
+  // 1. Resolve a Promise do searchParams no Next.js 15+
+  const resolvedParams = await searchParams;
 
-  async function checkDuplicate(email: string) {
-    const { data } = await supabase
-      .from("leads")
-      .select("id, empresa")
-      .eq("email", email)
-      .maybeSingle();
+  let query = supabase.from("leads").select("*");
 
-    return data;
+  // 2. Filtro de Busca (aplica apenas se houver termo digitado)
+  const termo = resolvedParams.busca?.trim();
+  if (termo) {
+    query = query.or(`nome_contato.ilike.%${termo}%,empresa.ilike.%${termo}%`);
   }
 
-  async function onSubmit(formData: LeadFormData) {
-    setSubmitting(true);
+  // 3. Filtro por Status (aplica ilike para evitar problemas com acentuação como 'Negociação')
+  if (resolvedParams.status) {
+    query = query.ilike("status", resolvedParams.status.trim());
+  }
 
-    const existing = await checkDuplicate(formData.email);
+  // 4. Filtro por Classificação
+  if (resolvedParams.classificacao) {
+    query = query.ilike("classificacao", resolvedParams.classificacao.trim());
+  }
 
-    if (existing && !duplicateWarning) {
-      setDuplicateWarning(
-        `Atenção: Já existe um lead cadastrado com este e-mail (${existing.empresa ?? "sem empresa registrada"}). Clique em cadastrar novamente para confirmar.`
-      );
-      setSubmitting(false);
-      return;
-    }
+  // 5. Filtro por Origem
+  if (resolvedParams.origem) {
+    query = query.ilike("origem", resolvedParams.origem.trim());
+  }
 
-    const classificacao = classificarLead(formData);
+  const { data: leads, error } = await query;
 
-    // Trata campos vazios para enviar NULL ao Supabase
-    const payload = {
-      ...formData,
-      previsao_fechamento: formData.previsao_fechamento || null,
-      valor_potencial: formData.valor_potencial || null,
-      empresa: formData.empresa || null,
-      telefone: formData.telefone || null,
-      origem: formData.origem || null,
-      status: "Novo",
-      classificacao,
-    };
-
-    const { error } = await supabase
-      .from("leads")
-      .insert([payload])
-      .select()
-      .single();
-
-    setSubmitting(false);
-
-    if (error) {
-      alert("Erro ao salvar: " + error.message);
-      return;
-    }
-
-    router.push("/");
+  if (error) {
+    console.error("Erro do Supabase:", error);
   }
 
   return (
-    <main className="min-h-screen bg-black text-white p-8 flex justify-center items-center">
-      <div className="w-full max-w-lg bg-zinc-900 p-6 rounded-xl border border-zinc-800 shadow-xl">
-        <h1 className="text-2xl font-bold mb-6">Cadastrar Novo Lead</h1>
-
-        <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
-          <div>
-            <label className="block text-sm font-medium mb-1 text-zinc-300">
-              Nome do Contato *
-            </label>
-            <input
-              {...register("nome_contato")}
-              type="text"
-              placeholder="Ex: Ana Clara"
-              className="w-full bg-zinc-800 border border-zinc-700 rounded-md p-2.5 text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
-            />
-            {errors.nome_contato?.message && (
-              <span className="text-red-400 text-xs mt-1 block">
-                {String(errors.nome_contato.message)}
-              </span>
-            )}
-          </div>
-
-          <div>
-            <label className="block text-sm font-medium mb-1 text-zinc-300">
-              E-mail *
-            </label>
-            <input
-              {...register("email")}
-              type="email"
-              placeholder="exemplo@empresa.com"
-              className="w-full bg-zinc-800 border border-zinc-700 rounded-md p-2.5 text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
-            />
-            {errors.email?.message && (
-              <span className="text-red-400 text-xs mt-1 block">
-                {String(errors.email.message)}
-              </span>
-            )}
-          </div>
-
-          <div>
-            <label className="block text-sm font-medium mb-1 text-zinc-300">
-              Empresa
-            </label>
-            <input
-              {...register("empresa")}
-              type="text"
-              placeholder="Nome da empresa"
-              className="w-full bg-zinc-800 border border-zinc-700 rounded-md p-2.5 text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
-            />
-          </div>
-
-          <div>
-            <label className="block text-sm font-medium mb-1 text-zinc-300">
-              Telefone
-            </label>
-            <input
-              {...register("telefone")}
-              type="text"
-              placeholder="(85) 99999-9999"
-              className="w-full bg-zinc-800 border border-zinc-700 rounded-md p-2.5 text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
-            />
-          </div>
-
-          <div>
-            <label className="block text-sm font-medium mb-1 text-zinc-300">
-              Valor Potencial (R$)
-            </label>
-            <input
-              {...register("valor_potencial")}
-              type="number"
-              placeholder="Ex: 5000"
-              className="w-full bg-zinc-800 border border-zinc-700 rounded-md p-2.5 text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
-            />
-          </div>
-
-          <div>
-            <label className="block text-sm font-medium mb-1 text-zinc-300">
-              Origem
-            </label>
-            <select
-              {...register("origem")}
-              className="w-full bg-zinc-800 border border-zinc-700 rounded-md p-2.5 text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
-            >
-              <option value="">Selecione...</option>
-              <option value="Indicação">Indicação</option>
-              <option value="Prospecção Ativa">Prospecção Ativa</option>
-              <option value="WhatsApp">WhatsApp</option>
-              <option value="Outro">Outro</option>
-            </select>
-          </div>
-
-          <div>
-            <label className="block text-sm font-medium mb-1 text-zinc-300">
-              Previsão de Fechamento
-            </label>
-            <input
-              {...register("previsao_fechamento")}
-              type="date"
-              className="w-full bg-zinc-800 border border-zinc-700 rounded-md p-2.5 text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
-            />
-          </div>
-
-          {duplicateWarning && (
-            <div className="bg-amber-500/10 border border-amber-500/50 p-3 rounded-md">
-              <p className="text-amber-400 text-xs">{duplicateWarning}</p>
-            </div>
-          )}
-
-          <button
-            type="submit"
-            disabled={submitting}
-            className="w-full mt-4 bg-blue-600 hover:bg-blue-500 text-white font-semibold py-2.5 px-4 rounded-md transition duration-200 disabled:opacity-50"
-          >
-            {submitting ? "Salvando..." : "Cadastrar lead"}
-          </button>
-        </form>
+    <main className="p-8 space-y-6 max-w-[1600px] mx-auto">
+      <div className="flex justify-between items-center">
+        <div>
+          <h1 className="text-2xl font-bold text-white">Pipeline de Leads</h1>
+          <p className="text-sm text-zinc-400 mt-1">
+            Gerencie e acompanhe o progresso das suas oportunidades
+          </p>
+        </div>
       </div>
+
+      <LeadsFilters />
+
+      <LeadsView
+        key={JSON.stringify(resolvedParams)}
+        leadsIniciais={leads || []}
+      />
     </main>
   );
 }
