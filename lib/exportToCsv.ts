@@ -5,7 +5,7 @@ export function exportLeadsToCSV(leads: any[], filename = "leads_export.csv") {
     return;
   }
 
-  // Cabeçalhos do arquivo CSV
+  // Cabeçalhos das colunas
   const headers = [
     "ID",
     "Nome",
@@ -17,40 +17,42 @@ export function exportLeadsToCSV(leads: any[], filename = "leads_export.csv") {
     "Responsável",
   ];
 
-  // Mapeamento e tratamento das linhas
+  // Mapeia e formata os dados de cada lead
   const rows = leads.map((lead) => {
-    const nome = String(lead.nome || lead.nome_contato || lead.title || lead.name || "");
-    const empresa = String(lead.empresa || "");
-    const status = String(lead.status || "");
-    const origem = String(lead.origem || "");
-    const valor = String(lead.valor_potencial ?? lead.valor ?? 0);
-    const dataEntrada = String(lead.created_at || lead.data_entrada || "");
-
-    let responsavel = "Não atribuído";
-    if (typeof lead.responsavel === "object" && lead.responsavel?.nome) {
-      responsavel = String(lead.responsavel.nome);
-    } else if (typeof lead.responsavel === "string" && lead.responsavel.trim() !== "") {
-      responsavel = String(lead.responsavel);
+    // Trata formatação de data de forma limpa para o Excel
+    let formattedDate = "";
+    if (lead.createdAt || lead.created_at || lead.dataEntrada) {
+      const rawDate = lead.createdAt || lead.created_at || lead.dataEntrada;
+      const parsedDate = new Date(rawDate);
+      if (!isNaN(parsedDate.getTime())) {
+        formattedDate = parsedDate.toLocaleDateString("pt-BR");
+      } else {
+        formattedDate = String(rawDate);
+      }
     }
 
-    // Trata aspas duplas e vírgulas no CSV
+    const valor = lead.valorPotencial ?? lead.valor ?? lead.value ?? 0;
+
     return [
-      `"${lead.id}"`,
-      `"${nome.replace(/"/g, '""')}"`,
-      `"${empresa.replace(/"/g, '""')}"`,
-      `"${status.replace(/"/g, '""')}"`,
-      `"${origem.replace(/"/g, '""')}"`,
-      `"${valor}"`,
-      `"${dataEntrada}"`,
-      `"${responsavel.replace(/"/g, '""')}"`,
-    ].join(";"); // Usa ponto e vírgula para compatibilidade com o Excel em PT-BR
+      `"${lead.id || ""}"`,
+      `"${(lead.nome || lead.name || "").replace(/"/g, '""')}"`,
+      `"${(lead.empresa || lead.company || "").replace(/"/g, '""')}"`,
+      `"${(lead.status || "").replace(/"/g, '""')}"`,
+      `"${(lead.origem || lead.source || "").replace(/"/g, '""')}"`,
+      valor,
+      `"${formattedDate}"`,
+      `"${(lead.responsavel || lead.assignedTo || "Não atribuído").replace(/"/g, '""')}"`,
+    ].join(",");
   });
 
-  // Adiciona BOM (\uFEFF) para garantir acentuação correta no Excel PT-BR
-  const csvContent = "\uFEFF" + [headers.join(";"), ...rows].join("\n");
+  // Une os cabeçalhos e as linhas com quebra de linha
+  const csvContent = [headers.join(","), ...rows].join("\n");
 
-  // Cria e dispara o download
-  const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
+  // Adiciona o BOM UTF-8 (\uFEFF) para o Excel reconhecer acentos e codificação automaticamente
+  const blob = new Blob(["\uFEFF" + csvContent], {
+    type: "text/csv;charset=utf-8;",
+  });
+
   const url = URL.createObjectURL(blob);
   const link = document.createElement("a");
   link.setAttribute("href", url);
@@ -58,4 +60,5 @@ export function exportLeadsToCSV(leads: any[], filename = "leads_export.csv") {
   document.body.appendChild(link);
   link.click();
   document.body.removeChild(link);
+  URL.revokeObjectURL(url);
 }

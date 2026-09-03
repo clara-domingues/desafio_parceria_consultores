@@ -1,6 +1,6 @@
 "use client";
 
-import React from "react";
+import React, { useState } from "react";
 import { exportLeadsToCSV } from "@/lib/exportToCsv";
 import { useLeads } from "@/contexts/LeadsContext";
 
@@ -20,38 +20,50 @@ export interface LeadsFiltersProps {
   leads?: any[];
 }
 
+const DEFAULT_FILTERS: FilterState = {
+  search: "",
+  startDate: "",
+  endDate: "",
+  status: "",
+  origem: "",
+  responsavel: "",
+};
+
 export default function LeadsFilters({
-  filters,
+  filters: propFilters,
   onFilterChange,
   leads: propsLeads,
 }: LeadsFiltersProps) {
-  // Pega o estado do contexto de forma segura sem usar 'any' diretamente
+  // Pega o estado do contexto de forma segura
   const context = useLeads?.() as unknown as { leads?: unknown[] };
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const contextLeads = (context?.leads || []) as any[];
 
-  // Prioriza os leads passados via props e faz o fallback seguro para o contexto
+  // Estado local para digitação
+  const [internalFilters, setInternalFilters] = useState<FilterState>(DEFAULT_FILTERS);
+
+  // Se propFilters for fornecido via props, ele tem prioridade; caso contrário, usamos o interno.
+  const activeFilters = propFilters || internalFilters;
+
+  // Define qual lista de leads vai ser exportada
   const leadsToExport =
     propsLeads && propsLeads.length > 0 ? propsLeads : contextLeads;
-
-  const currentFilters: FilterState = filters || {
-    search: "",
-    startDate: "",
-    endDate: "",
-    status: "",
-    origem: "",
-    responsavel: "",
-  };
 
   const handleChange = (
     e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>
   ) => {
     const { name, value } = e.target;
+    const updatedFilters = {
+      ...activeFilters,
+      [name]: value,
+    };
+
+    // Atualiza o estado local
+    setInternalFilters(updatedFilters);
+
+    // Notifica o pai se callback existir
     if (onFilterChange) {
-      onFilterChange({
-        ...currentFilters,
-        [name]: value,
-      });
+      onFilterChange(updatedFilters);
     }
   };
 
@@ -63,7 +75,7 @@ export default function LeadsFilters({
           <input
             type="text"
             name="search"
-            value={currentFilters.search}
+            value={activeFilters.search}
             onChange={handleChange}
             placeholder="Buscar por nome, e-mail ou empresa..."
             className="w-full bg-zinc-950 border border-zinc-800 rounded-lg px-3.5 py-2 text-xs text-zinc-200 placeholder-zinc-500 focus:outline-none focus:border-zinc-700 transition"
@@ -75,7 +87,7 @@ export default function LeadsFilters({
           <input
             type="date"
             name="startDate"
-            value={currentFilters.startDate}
+            value={activeFilters.startDate}
             onChange={handleChange}
             className="bg-zinc-950 border border-zinc-800 rounded-lg px-2.5 py-2 text-xs text-zinc-300 focus:outline-none focus:border-zinc-700 transition"
           />
@@ -83,7 +95,7 @@ export default function LeadsFilters({
           <input
             type="date"
             name="endDate"
-            value={currentFilters.endDate}
+            value={activeFilters.endDate}
             onChange={handleChange}
             className="bg-zinc-950 border border-zinc-800 rounded-lg px-2.5 py-2 text-xs text-zinc-300 focus:outline-none focus:border-zinc-700 transition"
           />
@@ -93,7 +105,7 @@ export default function LeadsFilters({
         <div className="flex flex-wrap lg:flex-nowrap gap-2">
           <select
             name="status"
-            value={currentFilters.status}
+            value={activeFilters.status}
             onChange={handleChange}
             className="bg-zinc-950 border border-zinc-800 rounded-lg px-3 py-2 text-xs text-zinc-300 focus:outline-none focus:border-zinc-700 transition capitalize"
           >
@@ -108,7 +120,7 @@ export default function LeadsFilters({
 
           <select
             name="origem"
-            value={currentFilters.origem}
+            value={activeFilters.origem}
             onChange={handleChange}
             className="bg-zinc-950 border border-zinc-800 rounded-lg px-3 py-2 text-xs text-zinc-300 focus:outline-none focus:border-zinc-700 transition"
           >
@@ -122,7 +134,7 @@ export default function LeadsFilters({
 
           <select
             name="responsavel"
-            value={currentFilters.responsavel}
+            value={activeFilters.responsavel}
             onChange={handleChange}
             className="bg-zinc-950 border border-zinc-800 rounded-lg px-3 py-2 text-xs text-zinc-300 focus:outline-none focus:border-zinc-700 transition"
           >
