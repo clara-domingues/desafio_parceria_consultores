@@ -12,7 +12,7 @@ export interface FilterState {
   responsavel: string;
 }
 
-interface LeadsFiltersProps {
+export interface LeadsFiltersProps {
   filters?: FilterState;
   onFilterChange?: (filters: FilterState) => void;
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
