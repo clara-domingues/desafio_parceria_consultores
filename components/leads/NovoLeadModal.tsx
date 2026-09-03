@@ -1,184 +1,337 @@
-"use client";
-
-import { useState } from "react";
-import { useLeads } from "@/contexts/LeadsContext";
+import React, { useEffect, useState } from "react";
+import { supabase } from "@/lib/supabase";
 
 interface NovoLeadModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onLeadCriado?: () => void;
+  onSuccess?: () => void;
 }
 
-export default function NovoLeadModal({
+interface UsuarioOpcao {
+  id: string;
+  nome: string;
+}
+
+const ORIGENS = [
+  { valor: "Indicacao", rotulo: "Indicação" },
+  { valor: "WhatsApp", rotulo: "WhatsApp" },
+  { valor: "Redes Sociais", rotulo: "Redes Sociais" },
+  { valor: "Prospeccao Ativa", rotulo: "Prospecção Ativa" },
+  { valor: "Outro", rotulo: "Outro" },
+];
+
+const ESTADO_INICIAL = {
+  nome_contato: "",
+  empresa: "",
+  email: "",
+  telefone: "",
+  origem: "Outro",
+  segmento: "",
+  responsavel_id: "",
+  status: "Novo",
+  valor_potencial: 0,
+  data_entrada: new Date().toISOString().slice(0, 10),
+  previsao_fechamento: "",
+  observacoes: "",
+};
+
+// Extrai uma mensagem legível tanto de Error nativo quanto de erros do
+// Supabase/Postgres, que são objetos simples com .message, não instâncias de Error.
+function extrairMensagemErro(err: unknown): string {
+  if (err instanceof Error) return err.message;
+  if (typeof err === "object" && err !== null && "message" in err) {
+    const msg = (err as { message?: unknown }).message;
+    if (typeof msg === "string") return msg;
+  }
+  return "Erro desconhecido";
+}
+
+export const NovoLeadModal: React.FC<NovoLeadModalProps> = ({
   isOpen,
   onClose,
-  onLeadCriado,
-}: NovoLeadModalProps) {
-  const { addLead } = useLeads();
+  onSuccess,
+}) => {
   const [loading, setLoading] = useState(false);
-  const [formData, setFormData] = useState({
-    nome_contato: "",
-    empresa: "",
-    email: "",
-    telefone: "",
-    origem: "Outro",
-    valor_potencial: "",
-  });
+  const [usuarios, setUsuarios] = useState<UsuarioOpcao[]>([]);
+  const [avisoDuplicidade, setAvisoDuplicidade] = useState<string | null>(null);
+  const [formData, setFormData] = useState(ESTADO_INICIAL);
+
+  useEffect(() => {
+    if (!isOpen) return;
+
+    supabase
+      .from("usuarios")
+      .select("id, nome")
+      .then(({ data }) => setUsuarios(data || []));
+  }, [isOpen]);
 
   if (!isOpen) return null;
+
+  const handleChange = (
+    e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>
+  ) => {
+    const { name, value } = e.target;
+    setFormData((prev) => ({
+      ...prev,
+      [name]: name === "valor_potencial" ? Number(value) : value,
+    }));
+  };
+
+  const verificarDuplicidade = async (email: string) => {
+    const { data, error } = await supabase
+      .from("leads")
+      .select("id, empresa")
+      .eq("email", email)
+      .maybeSingle();
+
+    if (error) {
+      console.error("Erro ao verificar duplicidade:", extrairMensagemErro(error));
+    }
+    return data;
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
 
     try {
-      const valorNum = formData.valor_potencial
-        ? parseFloat(formData.valor_potencial)
-        : 0;
+      // 1. Checagem de duplicidade — só bloqueia se ainda não foi avisado
+      const existente = await verificarDuplicidade(formData.email);
+      if (existente && !avisoDuplicidade) {
+        setAvisoDuplicidade(
+          `Já existe um lead com esse e-mail (${existente.empresa ?? "sem empresa"}). Envie de novo para confirmar mesmo assim.`
+        );
+        setLoading(false);
+        return;
+      }
 
-      await addLead({
-        nome_contato: formData.nome_contato,
-        empresa: formData.empresa || "",
-        email: formData.email,
-        origem: formData.origem,
-        valor: valorNum,
-        valor_potencial: valorNum,
-        status: "Novo",
-        responsavel_id: null,
-        classificacao: null,
-        classificacao_motivo: null,
-      });
+      // 2. Classificação automática (Automação 1) — regra + IA, via API
+      let classificacao = "Frio";
+      let classificacaoMotivo = "Classificação baseada em valor, origem e prazo de fechamento.";
 
-      setFormData({
-        nome_contato: "",
-        empresa: "",
-        email: "",
-        telefone: "",
-        origem: "Outro",
-        valor_potencial: "",
-      });
+      try {
+        const respostaClassificacao = await fetch("/api/classificar", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            valor_potencial: formData.valor_potencial,
+            origem: formData.origem,
+            previsao_fechamento: formData.previsao_fechamento || null,
+            observacoes: formData.observacoes || null,
+          }),
+        });
+        const dadosClassificacao = await respostaClassificacao.json();
+        classificacao = dadosClassificacao.classificacao;
+        classificacaoMotivo = dadosClassificacao.justificativa;
+      } catch (erroClassificacao) {
+        console.error("Falha ao classificar automaticamente, usando padrão:", extrairMensagemErro(erroClassificacao));
+      }
 
-      if (onLeadCriado) onLeadCriado();
+      // 3. Inserção do lead já com a classificação resolvida
+      const { error } = await supabase.from("leads").insert([
+        {
+          nome_contato: formData.nome_contato,
+          empresa: formData.empresa || null,
+          email: formData.email,
+          telefone: formData.telefone || null,
+          origem: formData.origem,
+          segmento: formData.segmento || null,
+          responsavel_id: formData.responsavel_id || null,
+          status: formData.status,
+          classificacao,
+          classificacao_motivo: classificacaoMotivo,
+          valor_potencial: formData.valor_potencial,
+          data_entrada: formData.data_entrada,
+          previsao_fechamento: formData.previsao_fechamento || null,
+          observacoes: formData.observacoes || null,
+        },
+      ]);
+
+      if (error) throw error;
+
+      if (onSuccess) onSuccess();
       onClose();
-    } catch (error) {
-      console.error("Erro ao criar lead:", error);
-      alert("Erro ao cadastrar lead. Verifique os dados.");
+    } catch (err: unknown) {
+      const errorMsg = extrairMensagemErro(err);
+      console.error("Erro ao cadastrar lead:", errorMsg, err);
+      alert("Erro ao cadastrar o lead: " + errorMsg);
     } finally {
       setLoading(false);
     }
   };
 
   return (
-    <div className="fixed inset-0 z-50 bg-black/70 flex items-center justify-center p-4">
-      <div className="bg-zinc-900 border border-zinc-800 rounded-xl w-full max-w-md p-6 space-y-4">
-        <div className="flex justify-between items-center border-b border-zinc-800 pb-3">
-          <h2 className="text-lg font-bold text-white">Adicionar Novo Lead</h2>
-          <button
-            onClick={onClose}
-            className="text-zinc-400 hover:text-white font-semibold"
-          >
-            ✕
-          </button>
-        </div>
-
-        <form onSubmit={handleSubmit} className="space-y-3">
+    <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4 overflow-y-auto">
+      <div className="bg-zinc-900 border border-zinc-800 p-6 rounded-lg w-full max-w-lg text-white my-8">
+        <h2 className="text-xl font-bold mb-4">Cadastrar Novo Lead</h2>
+        <form onSubmit={handleSubmit} className="space-y-4">
           <div>
-            <label className="block text-xs font-medium text-zinc-400 mb-1">
-              Nome do Contato *
-            </label>
+            <label className="block text-sm text-zinc-400 mb-1">Nome do Contato *</label>
             <input
               type="text"
+              name="nome_contato"
               required
               value={formData.nome_contato}
-              onChange={(e) =>
-                setFormData({ ...formData, nome_contato: e.target.value })
-              }
-              className="w-full bg-zinc-950 border border-zinc-800 rounded px-3 py-2 text-sm text-white focus:outline-none focus:border-zinc-600"
+              onChange={handleChange}
+              className="w-full bg-zinc-800 border border-zinc-700 rounded px-3 py-2 text-white focus:outline-none focus:border-blue-500"
             />
           </div>
 
           <div>
-            <label className="block text-xs font-medium text-zinc-400 mb-1">
-              E-mail *
-            </label>
+            <label className="block text-sm text-zinc-400 mb-1">Empresa</label>
             <input
-              type="email"
-              required
-              value={formData.email}
-              onChange={(e) =>
-                setFormData({ ...formData, email: e.target.value })
-              }
-              className="w-full bg-zinc-950 border border-zinc-800 rounded px-3 py-2 text-sm text-white focus:outline-none focus:border-zinc-600"
+              type="text"
+              name="empresa"
+              value={formData.empresa}
+              onChange={handleChange}
+              className="w-full bg-zinc-800 border border-zinc-700 rounded px-3 py-2 text-white focus:outline-none focus:border-blue-500"
             />
           </div>
 
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-2 gap-4">
             <div>
-              <label className="block text-xs font-medium text-zinc-400 mb-1">
-                Empresa
-              </label>
+              <label className="block text-sm text-zinc-400 mb-1">E-mail *</label>
               <input
-                type="text"
-                value={formData.empresa}
-                onChange={(e) =>
-                  setFormData({ ...formData, empresa: e.target.value })
-                }
-                className="w-full bg-zinc-950 border border-zinc-800 rounded px-3 py-2 text-sm text-white focus:outline-none focus:border-zinc-600"
+                type="email"
+                name="email"
+                required
+                value={formData.email}
+                onChange={handleChange}
+                className="w-full bg-zinc-800 border border-zinc-700 rounded px-3 py-2 text-white focus:outline-none focus:border-blue-500"
               />
             </div>
-
             <div>
-              <label className="block text-xs font-medium text-zinc-400 mb-1">
-                Origem
-              </label>
+              <label className="block text-sm text-zinc-400 mb-1">Telefone</label>
+              <input
+                type="text"
+                name="telefone"
+                value={formData.telefone}
+                onChange={handleChange}
+                className="w-full bg-zinc-800 border border-zinc-700 rounded px-3 py-2 text-white focus:outline-none focus:border-blue-500"
+              />
+            </div>
+          </div>
+
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="block text-sm text-zinc-400 mb-1">Origem</label>
               <select
+                name="origem"
                 value={formData.origem}
-                onChange={(e) =>
-                  setFormData({ ...formData, origem: e.target.value })
-                }
-                className="w-full bg-zinc-950 border border-zinc-800 rounded px-3 py-2 text-sm text-white focus:outline-none focus:border-zinc-600"
+                onChange={handleChange}
+                className="w-full bg-zinc-800 border border-zinc-700 rounded px-3 py-2 text-white focus:outline-none focus:border-blue-500"
               >
-                <option value="Outro">Outro</option>
-                <option value="WhatsApp">WhatsApp</option>
-                <option value="Indicação">Indicação</option>
-                <option value="Redes Sociais">Redes Sociais</option>
-                <option value="Prospecção Ativa">Prospecção Ativa</option>
+                {ORIGENS.map((o) => (
+                  <option key={o.valor} value={o.valor}>{o.rotulo}</option>
+                ))}
               </select>
+            </div>
+            <div>
+              <label className="block text-sm text-zinc-400 mb-1">Segmento</label>
+              <input
+                type="text"
+                name="segmento"
+                placeholder="Ex: Varejo, Saúde..."
+                value={formData.segmento}
+                onChange={handleChange}
+                className="w-full bg-zinc-800 border border-zinc-700 rounded px-3 py-2 text-white focus:outline-none focus:border-blue-500"
+              />
+            </div>
+          </div>
+
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="block text-sm text-zinc-400 mb-1">Responsável</label>
+              <select
+                name="responsavel_id"
+                value={formData.responsavel_id}
+                onChange={handleChange}
+                className="w-full bg-zinc-800 border border-zinc-700 rounded px-3 py-2 text-white focus:outline-none focus:border-blue-500"
+              >
+                <option value="">Selecione...</option>
+                {usuarios.map((u) => (
+                  <option key={u.id} value={u.id}>{u.nome}</option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label className="block text-sm text-zinc-400 mb-1">Valor Potencial (R$)</label>
+              <input
+                type="number"
+                name="valor_potencial"
+                min={0}
+                value={formData.valor_potencial}
+                onChange={handleChange}
+                className="w-full bg-zinc-800 border border-zinc-700 rounded px-3 py-2 text-white focus:outline-none focus:border-blue-500"
+              />
+            </div>
+          </div>
+
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="block text-sm text-zinc-400 mb-1">Data de Entrada</label>
+              <input
+                type="date"
+                name="data_entrada"
+                value={formData.data_entrada}
+                onChange={handleChange}
+                className="w-full bg-zinc-800 border border-zinc-700 rounded px-3 py-2 text-white focus:outline-none focus:border-blue-500"
+              />
+            </div>
+            <div>
+              <label className="block text-sm text-zinc-400 mb-1">Previsão de Fechamento</label>
+              <input
+                type="date"
+                name="previsao_fechamento"
+                value={formData.previsao_fechamento}
+                onChange={handleChange}
+                className="w-full bg-zinc-800 border border-zinc-700 rounded px-3 py-2 text-white focus:outline-none focus:border-blue-500"
+              />
             </div>
           </div>
 
           <div>
-            <label className="block text-xs font-medium text-zinc-400 mb-1">
-              Valor Potencial (R$)
-            </label>
-            <input
-              type="number"
-              value={formData.valor_potencial}
-              onChange={(e) =>
-                setFormData({ ...formData, valor_potencial: e.target.value })
-              }
-              className="w-full bg-zinc-950 border border-zinc-800 rounded px-3 py-2 text-sm text-white focus:outline-none focus:border-zinc-600"
+            <label className="block text-sm text-zinc-400 mb-1">Observações</label>
+            <textarea
+              name="observacoes"
+              rows={3}
+              value={formData.observacoes}
+              onChange={handleChange}
+              placeholder="Detalhes da conversa, urgência do cliente, etc. — usado pela IA na classificação."
+              className="w-full bg-zinc-800 border border-zinc-700 rounded px-3 py-2 text-white focus:outline-none focus:border-blue-500"
             />
           </div>
 
-          <div className="flex justify-end gap-2 pt-3 border-t border-zinc-800">
+          {avisoDuplicidade && (
+            <div className="bg-amber-500/10 border border-amber-500/30 rounded p-3 text-sm text-amber-400">
+              {avisoDuplicidade}
+            </div>
+          )}
+
+          <p className="text-xs text-zinc-500">
+            A classificação (Quente/Morno/Frio) é calculada automaticamente ao salvar, com base no valor, origem e observações.
+          </p>
+
+          <div className="flex justify-end gap-3 pt-2">
             <button
               type="button"
               onClick={onClose}
-              className="px-4 py-2 text-sm text-zinc-400 hover:text-white rounded bg-zinc-800"
+              className="px-4 py-2 bg-zinc-800 hover:bg-zinc-700 rounded text-sm text-zinc-300"
             >
               Cancelar
             </button>
             <button
               type="submit"
               disabled={loading}
-              className="px-4 py-2 text-sm text-white font-medium bg-blue-600 hover:bg-blue-500 rounded disabled:opacity-50"
+              className="px-4 py-2 bg-blue-600 hover:bg-blue-500 rounded text-sm font-semibold disabled:opacity-50"
             >
-              {loading ? "Salvando..." : "Criar Lead"}
+              {loading ? "Salvando..." : avisoDuplicidade ? "Confirmar mesmo assim" : "Salvar Lead"}
             </button>
           </div>
         </form>
       </div>
     </div>
   );
-}
+};
+
+export default NovoLeadModal;

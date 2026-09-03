@@ -2,9 +2,19 @@
 
 import { useState } from "react";
 import NovoLeadModal from "@/components/leads/NovoLeadModal";
+import { useLeads } from "@/contexts/LeadsContext";
 
 export default function HeaderPipeline() {
   const [modalAberto, setModalAberto] = useState(false);
+  const [modalKey, setModalKey] = useState(0);
+  const { fetchLeads } = useLeads();
+
+  function abrirModal() {
+    // Incrementar a key força o React a criar uma instância nova do modal,
+    // então o formulário sempre nasce limpo — sem precisar resetar via useEffect.
+    setModalKey((k) => k + 1);
+    setModalAberto(true);
+  }
 
   return (
     <div className="flex justify-between items-center">
@@ -16,15 +26,17 @@ export default function HeaderPipeline() {
       </div>
 
       <button
-        onClick={() => setModalAberto(true)}
+        onClick={abrirModal}
         className="px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white font-medium text-sm rounded-lg transition shadow-sm"
       >
         + Novo Lead
       </button>
 
       <NovoLeadModal
+        key={modalKey}
         isOpen={modalAberto}
         onClose={() => setModalAberto(false)}
+        onSuccess={fetchLeads}
       />
     </div>
   );
