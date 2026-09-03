@@ -3,7 +3,6 @@
 import React, { useState, useMemo } from "react";
 import LeadsFilters, { FilterState } from "./LeadsFilters";
 import LeadsTable from "./LeadsTable";
-import HeaderPipeline from "./HeaderPipeline";
 import { useLeads, Lead } from "@/contexts/LeadsContext";
 
 export interface LeadsViewProps {
@@ -36,7 +35,6 @@ export default function LeadsView({
   // Aplica todos os filtros em tempo real
   const filteredLeads = useMemo(() => {
     return rawLeads.filter((leadItem) => {
-      // Cast duplo para contornar a restrição de conversão do TypeScript
       const lead = leadItem as unknown as Record<string, unknown>;
 
       // Filtro de Busca (Nome, Email, Empresa)
@@ -115,8 +113,7 @@ export default function LeadsView({
 
   return (
     <div className="space-y-6">
-      <HeaderPipeline />
-
+      {/* Barra de Filtros única */}
       <LeadsFilters
         filters={filters}
         onFilterChange={setFilters}
@@ -151,7 +148,7 @@ export default function LeadsView({
                     const valorNum = Number(
                       lead.valor_potencial ?? lead.valorPotencial ?? lead.valor ?? lead.value ?? 0
                     );
-                    const nomeStr = String(lead.nome || lead.name || "Sem nome");
+                    const nomeStr = String(lead.nome || lead.name || "Sem Nome");
                     const empresaStr = String(lead.empresa || lead.company || "Sem empresa");
                     const origemStr = String(lead.origem || lead.source || "Outro");
 
