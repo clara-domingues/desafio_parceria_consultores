@@ -1,281 +1,203 @@
 "use client";
 
-import { useState } from "react";
-import { useLeads, Lead } from "@/contexts/LeadsContext";
+import React, { useState, useMemo } from "react";
+import LeadsFilters, { FilterState } from "./LeadsFilters";
 import LeadsTable from "./LeadsTable";
-import LeadDetailsModal, { LeadDetalhes } from "./LeadDetailsModal";
-import { DragDropContext, Droppable, Draggable, DropResult } from "@hello-pangea/dnd";
+import HeaderPipeline from "./HeaderPipeline";
+import { useLeads, Lead } from "@/contexts/LeadsContext";
 
-export interface LeadEstendido extends Lead {
-  title?: string;
-  name?: string;
-  temperatura?: string;
-  score?: string | number;
-}
-
-interface LeadsViewProps {
+export interface LeadsViewProps {
   leadsIniciais?: Lead[];
   modoExibicao?: "kanban" | "tabela";
 }
 
-// Configuração das colunas e mapeamento flexível dos status vindos do banco/input
-const COLUNAS = [
-  { 
-    id: "Novo", 
-    titulo: "Novo", 
-    statusAceitos: ["novo", "novo_lead", "primeiro contato", "primeiro_contato"] 
-  },
-  { 
-    id: "Qualificação", 
-    titulo: "Qualificação", 
-    statusAceitos: ["qualificação", "qualificacao"] 
-  },
-  { 
-    id: "Proposta", 
-    titulo: "Proposta", 
-    statusAceitos: ["proposta"] 
-  },
-  { 
-    id: "Negociação", 
-    titulo: "Negociação", 
-    statusAceitos: ["negociação", "negociacao"] 
-  },
-  { 
-    id: "Ganho", 
-    titulo: "Ganho", 
-    statusAceitos: ["ganho"] 
-  },
-  { 
-    id: "Perdido", 
-    titulo: "Perdido", 
-    statusAceitos: ["perdido"] 
-  },
-];
+const DEFAULT_FILTERS: FilterState = {
+  search: "",
+  startDate: "",
+  endDate: "",
+  status: "",
+  origem: "",
+  responsavel: "",
+};
 
-export default function LeadsView({ leadsIniciais, modoExibicao = "kanban" }: LeadsViewProps) {
-  const { leads, updateLeadStatus } = useLeads();
-  const [overrideStatus, setOverrideStatus] = useState<Record<string, string>>({});
+export default function LeadsView({
+  leadsIniciais,
+  modoExibicao = "kanban",
+}: LeadsViewProps) {
+  const context = useLeads?.();
+  const contextLeads = context?.leads || [];
 
-  const [leadSelecionado, setLeadSelecionado] = useState<LeadDetalhes | null>(null);
-  const [modalDetalhesAberto, setModalDetalhesAberto] = useState(false);
-  const [mensagemSucesso, setMensagemSucesso] = useState<string | null>(null);
+  const rawLeads: Lead[] = useMemo(() => {
+    return contextLeads.length > 0 ? contextLeads : leadsIniciais || [];
+  }, [contextLeads, leadsIniciais]);
 
-  // 1. Damos prioridade aos leadsIniciais (já filtrados) ou aos do contexto
-  const listaBruta = Array.isArray(leadsIniciais) 
-    ? leadsIniciais 
-    : (Array.isArray(leads) ? leads : []);
+  const [filters, setFilters] = useState<FilterState>(DEFAULT_FILTERS);
 
-  // 2. Mapeamento direto sem necessidade de useState/useEffect
-  const listaLeads: LeadEstendido[] = (listaBruta as LeadEstendido[]).map((lead) => ({
-    ...lead,
-    status: overrideStatus[String(lead.id)] || lead.status,
-  }));
+  // Aplica todos os filtros em tempo real
+  const filteredLeads = useMemo(() => {
+    return rawLeads.filter((leadItem) => {
+      // Cast duplo para contornar a restrição de conversão do TypeScript
+      const lead = leadItem as unknown as Record<string, unknown>;
 
-  const abrirDetalhes = (lead: LeadEstendido) => {
-    setLeadSelecionado(lead as LeadDetalhes);
-    setModalDetalhesAberto(true);
-  };
+      // Filtro de Busca (Nome, Email, Empresa)
+      if (filters.search) {
+        const searchLower = filters.search.toLowerCase();
+        const nameVal = String(lead.nome || lead.name || "");
+        const emailVal = String(lead.email || "");
+        const companyVal = String(lead.empresa || lead.company || "");
 
-  const handleDragEnd = async (result: DropResult) => {
-    const { destination, source, draggableId } = result;
+        const matchesName = nameVal.toLowerCase().includes(searchLower);
+        const matchesEmail = emailVal.toLowerCase().includes(searchLower);
+        const matchesCompany = companyVal.toLowerCase().includes(searchLower);
 
-    if (!destination) return;
-    if (destination.droppableId === source.droppableId) return;
-
-    const novoStatus = destination.droppableId;
-    const leadMovido = listaLeads.find((l) => String(l.id) === draggableId);
-    const nomeCliente = leadMovido?.nome_contato || leadMovido?.nome || "Lead";
-
-    // 1. Atualização otimista do estado local
-    setOverrideStatus((prev) => ({
-      ...prev,
-      [draggableId]: novoStatus,
-    }));
-
-    // 2. Persiste no banco de dados
-    try {
-      if (typeof updateLeadStatus === "function") {
-        await updateLeadStatus(draggableId, novoStatus);
+        if (!matchesName && !matchesEmail && !matchesCompany) return false;
       }
-    } catch (error) {
-      console.error("[DragDrop Erro Backend]:", error);
-      setOverrideStatus((prev) => {
-        const copia = { ...prev };
-        delete copia[draggableId];
-        return copia;
-      });
-      alert("Não foi possível mover o lead. Tente novamente.");
-      return;
-    }
 
-    // 3. Automação e Feedback visual para "Ganho"
-    if (novoStatus === "Ganho") {
-      setMensagemSucesso(`🎉 Parabéns! O lead "${nomeCliente}" foi movido para GANHO e o responsável foi notificado.`);
-      setTimeout(() => setMensagemSucesso(null), 6000);
-
-      try {
-        const resposta = await fetch("/api/converter-lead", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ leadId: draggableId }),
-        });
-        const resultado = await resposta.json();
-
-        if (resultado.jaConvertido) {
-          console.log(`Lead "${nomeCliente}" já havia sido convertido anteriormente.`);
+      // Filtro de Status
+      if (filters.status) {
+        const statusVal = String(lead.status || "");
+        if (statusVal.toLowerCase() !== filters.status.toLowerCase()) {
+          return false;
         }
-      } catch (error) {
-        console.error("Erro na API de automação/notificação de conversão:", error);
       }
-    }
-  };
 
-  const formatCurrency = (val?: number | null) => {
-    if (!val) return "R$ 0,00";
-    return new Intl.NumberFormat("pt-BR", {
-      style: "currency",
-      currency: "BRL",
-    }).format(val);
-  };
+      // Filtro de Origem
+      if (filters.origem) {
+        const origemVal = String(lead.origem || lead.source || "");
+        if (origemVal.toLowerCase() !== filters.origem.toLowerCase()) {
+          return false;
+        }
+      }
 
-  const renderBadgeClassificacao = (lead: LeadEstendido) => {
-    const temp = (lead.classificacao || lead.temperatura || lead.score || "").toString().toLowerCase();
+      // Filtro de Responsável
+      if (filters.responsavel) {
+        const respVal = String(
+          lead.responsavel || lead.responsavel_id || lead.assignedTo || "Usuário Padrão"
+        );
+        if (respVal.toLowerCase() !== filters.responsavel.toLowerCase()) {
+          return false;
+        }
+      }
 
-    if (temp.includes("quente")) {
-      return (
-        <span className="text-[10px] bg-red-950/80 text-red-400 border border-red-800/80 px-2 py-0.5 rounded-full font-semibold shrink-0 whitespace-nowrap">
-          🔥 Quente
-        </span>
-      );
-    }
-    if (temp.includes("frio")) {
-      return (
-        <span className="text-[10px] bg-blue-950/80 text-blue-400 border border-blue-800/80 px-2 py-0.5 rounded-full font-semibold shrink-0 whitespace-nowrap">
-          ❄️ Frio
-        </span>
-      );
-    }
-    return (
-      <span className="text-[10px] bg-amber-950/80 text-amber-400 border border-amber-800/80 px-2 py-0.5 rounded-full font-semibold shrink-0 whitespace-nowrap">
-        ☀️ Morno
-      </span>
-    );
-  };
+      // Filtro de Data
+      if (filters.startDate || filters.endDate) {
+        const dateVal = String(
+          lead.created_at || lead.createdAt || lead.data_entrada || lead.dataEntrada || ""
+        );
+        if (dateVal) {
+          const leadDate = new Date(dateVal).getTime();
+          if (
+            filters.startDate &&
+            leadDate < new Date(filters.startDate).getTime()
+          )
+            return false;
+          if (
+            filters.endDate &&
+            leadDate > new Date(filters.endDate).getTime() + 86400000
+          )
+            return false;
+        }
+      }
 
-  if (modoExibicao === "tabela") {
-    return <LeadsTable leads={listaLeads} />;
-  }
+      return true;
+    });
+  }, [rawLeads, filters]);
+
+  // Colunas do Kanban
+  const columns = [
+    "Novo",
+    "Qualificação",
+    "Proposta",
+    "Negociação",
+    "Ganho",
+    "Perdido",
+  ];
 
   return (
-    <>
-      {/* Banner de Sucesso / Parabéns ao Mover para Ganho */}
-      {mensagemSucesso && (
-        <div className="mb-4 bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 p-4 rounded-xl text-sm font-medium flex items-center justify-between transition-all">
-          <div className="flex items-center gap-2">
-            <span>{mensagemSucesso}</span>
-          </div>
-          <button 
-            onClick={() => setMensagemSucesso(null)}
-            className="text-zinc-400 hover:text-white text-xs px-2 py-1"
-          >
-            ✕
-          </button>
-        </div>
-      )}
+    <div className="space-y-6">
+      <HeaderPipeline />
 
-      <DragDropContext onDragEnd={handleDragEnd}>
-        {/* CONTAINER DO KANBAN RESPONSIVO */}
-        <div className="w-full overflow-x-auto pb-6 pt-2">
-          <div className="inline-flex gap-4 min-w-full">
-            {COLUNAS.map((coluna) => {
-              // Normaliza a busca para aceitar variações do status cadastrado no banco
-              const leadsDaColuna = listaLeads.filter((lead) => {
-                const statusNormalizado = (lead.status || "Novo").toString().toLowerCase().trim();
-                return coluna.statusAceitos.includes(statusNormalizado);
-              });
-
-              return (
-                <div
-                  key={coluna.id}
-                  className="bg-zinc-900 border border-zinc-800 rounded-xl p-4 flex flex-col w-80 shrink-0"
-                >
-                  <div className="flex items-center justify-between mb-3 pb-2 border-b border-zinc-800">
-                    <h3 className="text-xs font-semibold uppercase tracking-wider text-zinc-400 truncate pr-2">
-                      {coluna.titulo}
-                    </h3>
-                    <span className="text-xs font-medium bg-zinc-800 text-zinc-300 px-2.5 py-0.5 rounded-full shrink-0">
-                      {leadsDaColuna.length}
-                    </span>
-                  </div>
-
-                  <Droppable droppableId={coluna.id}>
-                    {(provided, snapshot) => (
-                      <div
-                        {...provided.droppableProps}
-                        ref={provided.innerRef}
-                        className={`flex-1 space-y-3 min-h-[200px] transition-colors rounded-lg p-1 ${
-                          snapshot.isDraggingOver ? "bg-zinc-800/40" : ""
-                        }`}
-                      >
-                        {leadsDaColuna.map((lead, index) => (
-                          <Draggable
-                            key={String(lead.id)}
-                            draggableId={String(lead.id)}
-                            index={index}
-                          >
-                            {(provided, snapshot) => (
-                              <div
-                                ref={provided.innerRef}
-                                {...provided.draggableProps}
-                                {...provided.dragHandleProps}
-                                onClick={() => abrirDetalhes(lead)}
-                                className={`bg-zinc-950 border border-zinc-800 p-4 rounded-lg shadow-sm hover:border-zinc-700 transition space-y-3 cursor-pointer ${
-                                  snapshot.isDragging ? "opacity-75 shadow-xl border-blue-500 scale-105" : ""
-                                }`}
-                              >
-                                <div className="flex justify-between items-start gap-2">
-                                  <h4 className="font-semibold text-white text-sm line-clamp-2">
-                                    {lead.nome_contato || lead.nome || lead.title || lead.name || "Lead sem nome"}
-                                  </h4>
-                                  {renderBadgeClassificacao(lead)}
-                                </div>
-
-                                {lead.empresa && (
-                                  <p className="text-xs text-zinc-400 truncate">
-                                    {lead.empresa}
-                                  </p>
-                                )}
-
-                                <div className="pt-2 border-t border-zinc-900 flex justify-between items-center text-xs">
-                                  <span className="font-semibold text-emerald-400">
-                                    {formatCurrency(lead.valor_potencial ?? lead.valor)}
-                                  </span>
-                                  {lead.origem && (
-                                    <span className="text-zinc-400 text-[10px] bg-zinc-900 px-2 py-0.5 rounded border border-zinc-800 truncate max-w-[100px]">
-                                      {lead.origem}
-                                    </span>
-                                  )}
-                                </div>
-                              </div>
-                            )}
-                          </Draggable>
-                        ))}
-                        {provided.placeholder}
-                      </div>
-                    )}
-                  </Droppable>
-                </div>
-              );
-            })}
-          </div>
-        </div>
-      </DragDropContext>
-
-      <LeadDetailsModal
-        lead={leadSelecionado}
-        isOpen={modalDetalhesAberto}
-        onClose={() => setModalDetalhesAberto(false)}
+      <LeadsFilters
+        filters={filters}
+        onFilterChange={setFilters}
+        leads={filteredLeads}
       />
-    </>
+
+      {modoExibicao === "kanban" ? (
+        <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-6 gap-4 overflow-x-auto pb-4">
+          {columns.map((col) => {
+            const columnLeads = filteredLeads.filter((item) => {
+              const statusVal = String(item.status || "");
+              return statusVal.toLowerCase() === col.toLowerCase();
+            });
+
+            return (
+              <div
+                key={col}
+                className="bg-zinc-900/50 border border-zinc-800 rounded-xl p-3 min-w-[250px] flex flex-col gap-3"
+              >
+                <div className="flex items-center justify-between pb-2 border-b border-zinc-800">
+                  <span className="text-xs font-semibold text-zinc-400 uppercase tracking-wider">
+                    {col}
+                  </span>
+                  <span className="text-xs bg-zinc-800 text-zinc-400 px-2 py-0.5 rounded-full font-medium">
+                    {columnLeads.length}
+                  </span>
+                </div>
+
+                <div className="space-y-2.5 flex-1 min-h-[150px]">
+                  {columnLeads.map((item) => {
+                    const lead = item as unknown as Record<string, unknown>;
+                    const valorNum = Number(
+                      lead.valor_potencial ?? lead.valorPotencial ?? lead.valor ?? lead.value ?? 0
+                    );
+                    const nomeStr = String(lead.nome || lead.name || "Sem nome");
+                    const empresaStr = String(lead.empresa || lead.company || "Sem empresa");
+                    const origemStr = String(lead.origem || lead.source || "Outro");
+
+                    return (
+                      <div
+                        key={String(lead.id)}
+                        className="bg-zinc-900 border border-zinc-800 rounded-lg p-3 hover:border-zinc-700 transition cursor-pointer space-y-2 shadow-sm"
+                      >
+                        <div className="flex justify-between items-start gap-2">
+                          <h4 className="text-xs font-semibold text-zinc-200 capitalize">
+                            {nomeStr}
+                          </h4>
+                          {Boolean(lead.temperatura) && (
+                            <span className="text-[10px] px-1.5 py-0.5 rounded border border-zinc-700 bg-zinc-800 text-zinc-300">
+                              {String(lead.temperatura)}
+                            </span>
+                          )}
+                        </div>
+                        <p className="text-[11px] text-zinc-500 truncate">
+                          {empresaStr}
+                        </p>
+                        <div className="flex justify-between items-center pt-1 border-t border-zinc-800/60 text-[11px]">
+                          <span className="text-emerald-400 font-medium">
+                            R$ {valorNum.toLocaleString("pt-BR")}
+                          </span>
+                          <span className="text-[10px] text-zinc-500">
+                            {origemStr}
+                          </span>
+                        </div>
+                      </div>
+                    );
+                  })}
+
+                  {columnLeads.length === 0 && (
+                    <div className="h-full flex items-center justify-center text-[11px] text-zinc-600 italic py-8">
+                      Nenhum lead
+                    </div>
+                  )}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      ) : (
+        <LeadsTable leads={filteredLeads} />
+      )}
+    </div>
   );
 }
