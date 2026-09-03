@@ -2,6 +2,7 @@
 
 import React from "react";
 import { exportLeadsToCSV } from "@/lib/exportToCsv";
+import { useLeads } from "@/contexts/LeadsContext";
 
 export interface FilterState {
   search: string;
@@ -20,18 +21,38 @@ export interface LeadsFiltersProps {
 }
 
 export default function LeadsFilters({
-  filters = { search: "", startDate: "", endDate: "", status: "", origem: "", responsavel: "" },
-  onFilterChange = () => {},
-  leads = [],
+  filters,
+  onFilterChange,
+  leads: propsLeads,
 }: LeadsFiltersProps) {
+  // Pega o estado do contexto de forma segura sem usar 'any' diretamente
+  const context = useLeads?.() as unknown as { leads?: unknown[] };
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const contextLeads = (context?.leads || []) as any[];
+
+  // Prioriza os leads passados via props e faz o fallback seguro para o contexto
+  const leadsToExport =
+    propsLeads && propsLeads.length > 0 ? propsLeads : contextLeads;
+
+  const currentFilters: FilterState = filters || {
+    search: "",
+    startDate: "",
+    endDate: "",
+    status: "",
+    origem: "",
+    responsavel: "",
+  };
+
   const handleChange = (
     e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>
   ) => {
     const { name, value } = e.target;
-    onFilterChange({
-      ...filters,
-      [name]: value,
-    });
+    if (onFilterChange) {
+      onFilterChange({
+        ...currentFilters,
+        [name]: value,
+      });
+    }
   };
 
   return (
@@ -42,7 +63,7 @@ export default function LeadsFilters({
           <input
             type="text"
             name="search"
-            value={filters.search}
+            value={currentFilters.search}
             onChange={handleChange}
             placeholder="Buscar por nome, e-mail ou empresa..."
             className="w-full bg-zinc-950 border border-zinc-800 rounded-lg px-3.5 py-2 text-xs text-zinc-200 placeholder-zinc-500 focus:outline-none focus:border-zinc-700 transition"
@@ -54,7 +75,7 @@ export default function LeadsFilters({
           <input
             type="date"
             name="startDate"
-            value={filters.startDate}
+            value={currentFilters.startDate}
             onChange={handleChange}
             className="bg-zinc-950 border border-zinc-800 rounded-lg px-2.5 py-2 text-xs text-zinc-300 focus:outline-none focus:border-zinc-700 transition"
           />
@@ -62,7 +83,7 @@ export default function LeadsFilters({
           <input
             type="date"
             name="endDate"
-            value={filters.endDate}
+            value={currentFilters.endDate}
             onChange={handleChange}
             className="bg-zinc-950 border border-zinc-800 rounded-lg px-2.5 py-2 text-xs text-zinc-300 focus:outline-none focus:border-zinc-700 transition"
           />
@@ -72,7 +93,7 @@ export default function LeadsFilters({
         <div className="flex flex-wrap lg:flex-nowrap gap-2">
           <select
             name="status"
-            value={filters.status}
+            value={currentFilters.status}
             onChange={handleChange}
             className="bg-zinc-950 border border-zinc-800 rounded-lg px-3 py-2 text-xs text-zinc-300 focus:outline-none focus:border-zinc-700 transition capitalize"
           >
@@ -87,7 +108,7 @@ export default function LeadsFilters({
 
           <select
             name="origem"
-            value={filters.origem}
+            value={currentFilters.origem}
             onChange={handleChange}
             className="bg-zinc-950 border border-zinc-800 rounded-lg px-3 py-2 text-xs text-zinc-300 focus:outline-none focus:border-zinc-700 transition"
           >
@@ -101,7 +122,7 @@ export default function LeadsFilters({
 
           <select
             name="responsavel"
-            value={filters.responsavel}
+            value={currentFilters.responsavel}
             onChange={handleChange}
             className="bg-zinc-950 border border-zinc-800 rounded-lg px-3 py-2 text-xs text-zinc-300 focus:outline-none focus:border-zinc-700 transition"
           >
@@ -112,7 +133,7 @@ export default function LeadsFilters({
           {/* BOTÃO DE EXPORTAÇÃO CSV */}
           <button
             type="button"
-            onClick={() => exportLeadsToCSV(leads)}
+            onClick={() => exportLeadsToCSV(leadsToExport)}
             className="flex items-center gap-1.5 bg-zinc-800 hover:bg-zinc-700 text-zinc-200 text-xs px-3.5 py-2 rounded-lg border border-zinc-700 transition font-medium whitespace-nowrap"
             title="Exportar lista atual de leads para CSV"
           >
