@@ -32,15 +32,16 @@ export default function LeadsView({
 
   const [filters, setFilters] = useState<FilterState>(DEFAULT_FILTERS);
 
-  // Aplica todos os filtros em tempo real
+  // Aplica filtros cobrindo todas as variações de chaves possíveis
   const filteredLeads = useMemo(() => {
     return rawLeads.filter((leadItem) => {
       const lead = leadItem as unknown as Record<string, unknown>;
 
-      // Filtro de Busca (Nome, Email, Empresa)
       if (filters.search) {
         const searchLower = filters.search.toLowerCase();
-        const nameVal = String(lead.nome || lead.name || "");
+        const nameVal = String(
+          lead.nome || lead.nome_contato || lead.name || lead.cliente || lead.title || ""
+        );
         const emailVal = String(lead.email || "");
         const companyVal = String(lead.empresa || lead.company || "");
 
@@ -51,7 +52,6 @@ export default function LeadsView({
         if (!matchesName && !matchesEmail && !matchesCompany) return false;
       }
 
-      // Filtro de Status
       if (filters.status) {
         const statusVal = String(lead.status || "");
         if (statusVal.toLowerCase() !== filters.status.toLowerCase()) {
@@ -59,7 +59,6 @@ export default function LeadsView({
         }
       }
 
-      // Filtro de Origem
       if (filters.origem) {
         const origemVal = String(lead.origem || lead.source || "");
         if (origemVal.toLowerCase() !== filters.origem.toLowerCase()) {
@@ -67,17 +66,15 @@ export default function LeadsView({
         }
       }
 
-      // Filtro de Responsável
       if (filters.responsavel) {
         const respVal = String(
-          lead.responsavel || lead.responsavel_id || lead.assignedTo || "Usuário Padrão"
+          lead.responsavel || lead.responsavel_id || lead.assignedTo || ""
         );
         if (respVal.toLowerCase() !== filters.responsavel.toLowerCase()) {
           return false;
         }
       }
 
-      // Filtro de Data
       if (filters.startDate || filters.endDate) {
         const dateVal = String(
           lead.created_at || lead.createdAt || lead.data_entrada || lead.dataEntrada || ""
@@ -101,7 +98,6 @@ export default function LeadsView({
     });
   }, [rawLeads, filters]);
 
-  // Colunas do Kanban
   const columns = [
     "Novo",
     "Qualificação",
@@ -113,7 +109,7 @@ export default function LeadsView({
 
   return (
     <div className="space-y-6">
-      {/* Barra de Filtros única */}
+      {/* Exibe os filtros apenas se o componente pai não os estiver renderizando */}
       <LeadsFilters
         filters={filters}
         onFilterChange={setFilters}
@@ -148,9 +144,23 @@ export default function LeadsView({
                     const valorNum = Number(
                       lead.valor_potencial ?? lead.valorPotencial ?? lead.valor ?? lead.value ?? 0
                     );
-                    const nomeStr = String(lead.nome || lead.name || "Sem Nome");
-                    const empresaStr = String(lead.empresa || lead.company || "Sem empresa");
-                    const origemStr = String(lead.origem || lead.source || "Outro");
+
+                    // Mapeia todas as possíveis variações do nome usadas na tabela
+                    const nomeStr = String(
+                      lead.nome ||
+                        lead.nome_contato ||
+                        lead.name ||
+                        lead.cliente ||
+                        lead.title ||
+                        "Sem Nome"
+                    );
+
+                    const empresaStr = String(
+                      lead.empresa || lead.company || "Sem empresa"
+                    );
+                    const origemStr = String(
+                      lead.origem || lead.source || "Outro"
+                    );
 
                     return (
                       <div
