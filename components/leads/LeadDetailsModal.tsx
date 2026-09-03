@@ -32,6 +32,10 @@ export default function LeadDetailsModal({ lead, isOpen, onClose }: LeadDetailsM
   const [sugestaoIa, setSugestaoIa] = useState<string | null>(null);
   const [carregandoIa, setCarregandoIa] = useState(false);
 
+  // Estados para o Resumo Inteligente (IA)
+  const [resumoIa, setResumoIa] = useState<string | null>(null);
+  const [carregandoResumo, setCarregandoResumo] = useState(false);
+
   if (!isOpen || !lead) return null;
 
   const formatCurrency = (val?: number | null) => {
@@ -64,6 +68,22 @@ export default function LeadDetailsModal({ lead, isOpen, onClose }: LeadDetailsM
     }, 800);
   };
 
+  const gerarResumoIA = () => {
+    setCarregandoResumo(true);
+    setTimeout(() => {
+      const nomeCliente = lead.nome || lead.nome_contato || lead.title || lead.name || "Lead";
+      const empresaCliente = lead.empresa ? `da empresa ${lead.empresa}` : "pessoa física";
+      const valorFormatado = formatCurrency(lead.valor_potencial ?? lead.valor);
+      const origemLead = lead.origem || "canal não mapeado";
+      const statusAtual = lead.status || "Novo Lead";
+
+      const resumoGerado = `O lead ${nomeCliente} (${empresaCliente}) entrou via ${origemLead} com um potencial negociado de ${valorFormatado}. Atualmente no estágio de ${statusAtual}, o contato apresenta bom potencial de conversão e aguarda movimentação do time comercial.`;
+
+      setResumoIa(resumoGerado);
+      setCarregandoResumo(false);
+    }, 800);
+  };
+
   const historicoExemplo = [
     {
       id: "1",
@@ -77,7 +97,6 @@ export default function LeadDetailsModal({ lead, isOpen, onClose }: LeadDetailsM
     },
   ];
 
-  // Trata o campo responsavel com segurança
   let nomeResponsavel = "Usuário Padrão";
   if (typeof lead.responsavel === "object" && lead.responsavel?.nome) {
     nomeResponsavel = lead.responsavel.nome;
@@ -140,6 +159,31 @@ export default function LeadDetailsModal({ lead, isOpen, onClose }: LeadDetailsM
                 {nomeResponsavel}
               </p>
             </div>
+          </div>
+
+          {/* RESUMO INTELIGENTE (IA) */}
+          <div className="bg-purple-950/30 border border-purple-900/50 rounded-lg p-4 space-y-2">
+            <div className="flex justify-between items-center">
+              <h3 className="font-semibold text-purple-400 text-xs uppercase tracking-wider flex items-center gap-1.5">
+                📝 Resumo Inteligente (IA)
+              </h3>
+              <button
+                onClick={gerarResumoIA}
+                disabled={carregandoResumo}
+                className="text-xs bg-purple-600 hover:bg-purple-500 text-white px-3 py-1 rounded transition disabled:opacity-50"
+              >
+                {carregandoResumo ? "Sintetizando..." : "Gerar Resumo"}
+              </button>
+            </div>
+            {resumoIa ? (
+              <p className="text-xs text-zinc-200 bg-zinc-900/80 p-3 rounded border border-purple-800/40 leading-relaxed">
+                {resumoIa}
+              </p>
+            ) : (
+              <p className="text-xs text-zinc-500 italic">
+                Clique no botão para gerar uma síntese executiva das informações do lead.
+              </p>
+            )}
           </div>
 
           {/* SUGESTÃO DE PRÓXIMA AÇÃO (IA) */}
