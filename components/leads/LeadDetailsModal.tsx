@@ -1,6 +1,7 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
+import { supabase } from "@/lib/supabase";
 
 export interface LeadDetalhes {
   id: string | number;
@@ -18,8 +19,17 @@ export interface LeadDetalhes {
   responsavel_id?: string | null;
   responsavel?: { nome?: string } | string | null;
   classificacao?: string | null;
+  observacoes?: string | null;
   temperatura?: string | null;
   score?: string | number | null;
+}
+
+interface RegistroHistorico {
+  id: string;
+  campo_alterado: string;
+  valor_anterior: string | null;
+  valor_novo: string | null;
+  criado_em: string;
 }
 
 interface LeadDetailsModalProps {
@@ -32,9 +42,49 @@ export default function LeadDetailsModal({ lead, isOpen, onClose }: LeadDetailsM
   const [sugestaoIa, setSugestaoIa] = useState<string | null>(null);
   const [carregandoIa, setCarregandoIa] = useState(false);
 
-  // Estados para o Resumo Inteligente (IA)
   const [resumoIa, setResumoIa] = useState<string | null>(null);
   const [carregandoResumo, setCarregandoResumo] = useState(false);
+
+  const [historico, setHistorico] = useState<RegistroHistorico[]>([]);
+  const [carregandoHistorico, setCarregandoHistorico] = useState(false);
+
+  // Busca o histórico REAL no Supabase toda vez que um lead diferente é aberto.
+  // Toda a lógica fica dentro de uma função assíncrona nomeada (carregar), e o
+  // efeito só a invoca — isso evita chamadas de setState "soltas" direto no
+  // corpo do efeito, que é o que o eslint (react-hooks/set-state-in-effect) reclama.
+  useEffect(() => {
+    if (!isOpen || !lead) return;
+
+    let ativo = true;
+
+    async function carregar() {
+      setResumoIa(null);
+      setSugestaoIa(null);
+      setCarregandoHistorico(true);
+
+      const { data, error } = await supabase
+        .from("historico")
+        .select("id, campo_alterado, valor_anterior, valor_novo, criado_em")
+        .eq("lead_id", lead!.id)
+        .order("criado_em", { ascending: false });
+
+      if (!ativo) return;
+
+      if (error) {
+        console.error("Erro ao buscar histórico:", error.message);
+        setHistorico([]);
+      } else {
+        setHistorico(data || []);
+      }
+      setCarregandoHistorico(false);
+    }
+
+    carregar();
+
+    return () => {
+      ativo = false;
+    };
+  }, [isOpen, lead]);
 
   if (!isOpen || !lead) return null;
 
@@ -47,55 +97,31 @@ export default function LeadDetailsModal({ lead, isOpen, onClose }: LeadDetailsM
     return new Date(dateString).toLocaleDateString("pt-BR");
   };
 
-  const gerarProximaAcaoIA = () => {
-    setCarregandoIa(true);
-    setTimeout(() => {
-      const status = (lead.status || "").toLowerCase();
-      let recomendacao = "";
-
-      if (status.includes("novo") || status.includes("contato")) {
-        recomendacao = "Enviar mensagem inicial via WhatsApp apresentando o portfólio de serviços e agendando uma reunião de diagnóstico de 15 minutos.";
-      } else if (status.includes("proposta")) {
-        recomendacao = "Fazer follow-up focado nas dúvidas da proposta enviada e destacar o retorno sobre o investimento (ROI) para o cliente.";
-      } else if (status.includes("negociacao")) {
-        recomendacao = "Oferecer uma condição especial de pagamento ou bônus de implementação rápida para fechar o contrato até o final da semana.";
-      } else {
-        recomendacao = "Manter contato periódico quinzenal com atualizações e conteúdos relevantes do setor.";
-      }
-
-      setSugestaoIa(recomendacao);
-      setCarregandoIa(false);
-    }, 800);
+  const formatDateTime = (dateString: string) => {
+    return new Date(dateString).toLocaleString("pt-BR");
   };
 
-  const gerarResumoIA = () => {
-    setCarregandoResumo(true);
-    setTimeout(() => {
-      const nomeCliente = lead.nome || lead.nome_contato || lead.title || lead.name || "Lead";
-      const empresaCliente = lead.empresa ? `da empresa ${lead.empresa}` : "pessoa física";
-      const valorFormatado = formatCurrency(lead.valor_potencial ?? lead.valor);
-      const origemLead = lead.origem || "canal não mapeado";
-      const statusAtual = lead.status || "Novo Lead";
+  const gerarInsightIA = async (tipo: "resumo" | "proxima_acao") => {
+    const setCarregando = tipo === "resumo" ? setCarregandoResumo : setCarregandoIa;
+    const setTexto = tipo === "resumo" ? setResumoIa : setSugestaoIa;
 
-      const resumoGerado = `O lead ${nomeCliente} (${empresaCliente}) entrou via ${origemLead} com um potencial negociado de ${valorFormatado}. Atualmente no estágio de ${statusAtual}, o contato apresenta bom potencial de conversão e aguarda movimentação do time comercial.`;
-
-      setResumoIa(resumoGerado);
-      setCarregandoResumo(false);
-    }, 800);
+    setCarregando(true);
+    try {
+    const resposta = await fetch("/api/leads-insights", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ tipo, lead }),
+      });
+      const dados = await resposta.json();
+      if (dados.error) throw new Error(dados.error);
+      setTexto(dados.texto);
+    } catch (err) {
+      console.error(`Erro ao gerar ${tipo}:`, err);
+      setTexto("Não foi possível gerar a resposta da IA agora. Tente novamente.");
+    } finally {
+      setCarregando(false);
+    }
   };
-
-  const historicoExemplo = [
-    {
-      id: "1",
-      data: formatDate(lead.created_at || lead.data_entrada || new Date().toISOString()),
-      descricao: "Lead cadastrado no sistema.",
-    },
-    {
-      id: "2",
-      data: formatDate(new Date().toISOString()),
-      descricao: `Status atualizado para: ${lead.status || "Novo Lead"}.`,
-    },
-  ];
 
   let nomeResponsavel = "Usuário Padrão";
   if (typeof lead.responsavel === "object" && lead.responsavel?.nome) {
@@ -107,7 +133,6 @@ export default function LeadDetailsModal({ lead, isOpen, onClose }: LeadDetailsM
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm p-4">
       <div className="bg-zinc-900 border border-zinc-800 rounded-xl w-full max-w-2xl overflow-hidden shadow-2xl flex flex-col max-h-[90vh]">
-        {/* CABEÇALHO */}
         <div className="p-5 border-b border-zinc-800 flex justify-between items-start bg-zinc-950">
           <div>
             <span className="text-xs font-semibold text-blue-400 uppercase tracking-wider">
@@ -117,17 +142,12 @@ export default function LeadDetailsModal({ lead, isOpen, onClose }: LeadDetailsM
               {lead.nome || lead.nome_contato || lead.title || lead.name || "Lead sem nome"}
             </h2>
           </div>
-          <button
-            onClick={onClose}
-            className="text-zinc-400 hover:text-white p-1 rounded-lg transition"
-          >
+          <button onClick={onClose} className="text-zinc-400 hover:text-white p-1 rounded-lg transition">
             ✕
           </button>
         </div>
 
-        {/* CONTEÚDO */}
         <div className="p-6 overflow-y-auto space-y-6 text-sm text-zinc-300">
-          {/* GRID DE INFORMAÇÕES */}
           <div className="grid grid-cols-2 sm:grid-cols-3 gap-4 bg-zinc-950/50 p-4 rounded-lg border border-zinc-800">
             <div>
               <p className="text-xs text-zinc-500 font-medium uppercase">Valor Potencial</p>
@@ -137,15 +157,11 @@ export default function LeadDetailsModal({ lead, isOpen, onClose }: LeadDetailsM
             </div>
             <div>
               <p className="text-xs text-zinc-500 font-medium uppercase">Status</p>
-              <p className="text-sm font-semibold text-white mt-0.5 capitalize">
-                {lead.status || "Novo Lead"}
-              </p>
+              <p className="text-sm font-semibold text-white mt-0.5">{lead.status || "Novo"}</p>
             </div>
             <div>
               <p className="text-xs text-zinc-500 font-medium uppercase">Origem</p>
-              <p className="text-sm font-semibold text-white mt-0.5">
-                {lead.origem || "Não informada"}
-              </p>
+              <p className="text-sm font-semibold text-white mt-0.5">{lead.origem || "Não informada"}</p>
             </div>
             <div>
               <p className="text-xs text-zinc-500 font-medium uppercase">Data de Entrada</p>
@@ -155,24 +171,21 @@ export default function LeadDetailsModal({ lead, isOpen, onClose }: LeadDetailsM
             </div>
             <div>
               <p className="text-xs text-zinc-500 font-medium uppercase">Responsável</p>
-              <p className="text-sm text-zinc-300 mt-0.5">
-                {nomeResponsavel}
-              </p>
+              <p className="text-sm text-zinc-300 mt-0.5">{nomeResponsavel}</p>
             </div>
           </div>
 
-          {/* RESUMO INTELIGENTE (IA) */}
           <div className="bg-purple-950/30 border border-purple-900/50 rounded-lg p-4 space-y-2">
             <div className="flex justify-between items-center">
               <h3 className="font-semibold text-purple-400 text-xs uppercase tracking-wider flex items-center gap-1.5">
                 📝 Resumo Inteligente (IA)
               </h3>
               <button
-                onClick={gerarResumoIA}
+                onClick={() => gerarInsightIA("resumo")}
                 disabled={carregandoResumo}
                 className="text-xs bg-purple-600 hover:bg-purple-500 text-white px-3 py-1 rounded transition disabled:opacity-50"
               >
-                {carregandoResumo ? "Sintetizando..." : "Gerar Resumo"}
+                {carregandoResumo ? "Gerando..." : "Gerar Resumo"}
               </button>
             </div>
             {resumoIa ? (
@@ -181,23 +194,22 @@ export default function LeadDetailsModal({ lead, isOpen, onClose }: LeadDetailsM
               </p>
             ) : (
               <p className="text-xs text-zinc-500 italic">
-                Clique no botão para gerar uma síntese executiva das informações do lead.
+                Clique no botão para a IA gerar uma síntese executiva deste lead.
               </p>
             )}
           </div>
 
-          {/* SUGESTÃO DE PRÓXIMA AÇÃO (IA) */}
           <div className="bg-blue-950/30 border border-blue-900/50 rounded-lg p-4 space-y-2">
             <div className="flex justify-between items-center">
               <h3 className="font-semibold text-blue-400 text-xs uppercase tracking-wider flex items-center gap-1.5">
                 ✨ Sugestão de Próxima Ação (IA)
               </h3>
               <button
-                onClick={gerarProximaAcaoIA}
+                onClick={() => gerarInsightIA("proxima_acao")}
                 disabled={carregandoIa}
                 className="text-xs bg-blue-600 hover:bg-blue-500 text-white px-3 py-1 rounded transition disabled:opacity-50"
               >
-                {carregandoIa ? "Analisando..." : "Gerar Ação"}
+                {carregandoIa ? "Gerando..." : "Gerar Ação"}
               </button>
             </div>
             {sugestaoIa ? (
@@ -206,29 +218,39 @@ export default function LeadDetailsModal({ lead, isOpen, onClose }: LeadDetailsM
               </p>
             ) : (
               <p className="text-xs text-zinc-500 italic">
-                Clique no botão para gerar uma estratégia comercial personalizada com IA para este lead.
+                Clique no botão para a IA sugerir uma próxima ação comercial para este lead.
               </p>
             )}
           </div>
 
-          {/* HISTÓRICO DE ALTERAÇÕES */}
           <div>
             <h3 className="font-semibold text-xs uppercase tracking-wider mb-3 text-zinc-400">
               Histórico de Alterações
             </h3>
-            <div className="space-y-2 border-l-2 border-zinc-800 pl-4 ml-1">
-              {historicoExemplo.map((item) => (
-                <div key={item.id} className="relative text-xs">
-                  <div className="absolute -left-[21px] top-1.5 w-2 h-2 bg-blue-500 rounded-full" />
-                  <p className="text-zinc-400 text-[10px]">{item.data}</p>
-                  <p className="text-zinc-200 mt-0.5">{item.descricao}</p>
-                </div>
-              ))}
-            </div>
+            {carregandoHistorico ? (
+              <p className="text-xs text-zinc-500 italic">Carregando histórico...</p>
+            ) : historico.length === 0 ? (
+              <p className="text-xs text-zinc-500 italic">Nenhuma alteração registrada ainda.</p>
+            ) : (
+              <div className="space-y-2 border-l-2 border-zinc-800 pl-4 ml-1">
+                {historico.map((item) => (
+                  <div key={item.id} className="relative text-xs">
+                    <div className="absolute -left-[21px] top-1.5 w-2 h-2 bg-blue-500 rounded-full" />
+                    <p className="text-zinc-400 text-[10px]">{formatDateTime(item.criado_em)}</p>
+                    <p className="text-zinc-200 mt-0.5">
+                      {item.campo_alterado === "status"
+                        ? `Status alterado de ${item.valor_anterior ?? "—"} → ${item.valor_novo}`
+                        : item.campo_alterado === "conversao"
+                        ? item.valor_novo
+                        : `${item.campo_alterado} alterado de ${item.valor_anterior ?? "—"} para ${item.valor_novo}`}
+                    </p>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
         </div>
 
-        {/* RODAPÉ */}
         <div className="p-4 bg-zinc-950 border-t border-zinc-800 flex justify-end">
           <button
             onClick={onClose}

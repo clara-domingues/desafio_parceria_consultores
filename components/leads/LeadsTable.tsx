@@ -17,9 +17,10 @@ export interface Lead {
 
 interface LeadsTableProps {
   leads: Lead[];
+  onRowClick?: (lead: Lead) => void;
 }
 
-export const LeadsTable: React.FC<LeadsTableProps> = ({ leads }) => {
+export const LeadsTable: React.FC<LeadsTableProps> = ({ leads, onRowClick }) => {
   const formatarMoeda = (valor?: number | null) => {
     return (valor || 0).toLocaleString("pt-BR", {
       style: "currency",
@@ -31,22 +32,6 @@ export const LeadsTable: React.FC<LeadsTableProps> = ({ leads }) => {
   const formatarData = (dataString?: string | null) => {
     if (!dataString) return "-";
     return new Date(dataString).toLocaleDateString("pt-BR");
-  };
-
-  const formatarStatus = (status?: string | null) => {
-    if (!status) return "Novo Lead";
-
-    const statusMap: Record<string, string> = {
-      novo: "Novo Lead",
-      novo_lead: "Novo Lead",
-      primeiro_contato: "Primeiro Contato",
-      qualificacao: "Qualificação",
-      proposta: "Proposta/Apresentação",
-      negociacao: "Negociação",
-      ganho: "Ganho",
-      perdido: "Perdido",
-    };
-    return statusMap[status] || status;
   };
 
   const renderClassificacaoBadge = (classificacao?: string | null) => {
@@ -74,7 +59,7 @@ export const LeadsTable: React.FC<LeadsTableProps> = ({ leads }) => {
     }
     return (
       <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-semibold bg-zinc-800 text-zinc-400 border border-zinc-700">
-        ☀️ Morno
+        —
       </span>
     );
   };
@@ -101,41 +86,31 @@ export const LeadsTable: React.FC<LeadsTableProps> = ({ leads }) => {
               const dataEntrada = lead.created_at || lead.data_entrada;
 
               let nomeResponsavel = "Usuário Padrão";
-              if (
-                typeof lead.responsavel === "object" &&
-                lead.responsavel?.nome
-              ) {
+              if (typeof lead.responsavel === "object" && lead.responsavel?.nome) {
                 nomeResponsavel = lead.responsavel.nome;
               } else if (typeof lead.responsavel === "string") {
                 nomeResponsavel = lead.responsavel;
               }
 
               return (
-                <tr key={lead.id} className="hover:bg-zinc-900/30 transition">
-                  <td className="px-4 py-3 font-medium text-white">
-                    {nomeContato}
-                  </td>
+                <tr
+                  key={lead.id}
+                  onClick={() => onRowClick?.(lead)}
+                  className={`hover:bg-zinc-900/30 transition ${onRowClick ? "cursor-pointer" : ""}`}
+                >
+                  <td className="px-4 py-3 font-medium text-white">{nomeContato}</td>
                   <td className="px-4 py-3">{lead.empresa || "-"}</td>
-                  <td className="px-4 py-3">{formatarStatus(lead.status)}</td>
-                  <td className="px-4 py-3">
-                    {renderClassificacaoBadge(lead.classificacao)}
-                  </td>
-                  <td className="px-4 py-3 font-semibold text-white">
-                    {formatarMoeda(valorLead)}
-                  </td>
-                  <td className="px-4 py-3 text-zinc-300">
-                    {nomeResponsavel}
-                  </td>
+                  <td className="px-4 py-3">{lead.status || "Novo"}</td>
+                  <td className="px-4 py-3">{renderClassificacaoBadge(lead.classificacao)}</td>
+                  <td className="px-4 py-3 font-semibold text-white">{formatarMoeda(valorLead)}</td>
+                  <td className="px-4 py-3 text-zinc-300">{nomeResponsavel}</td>
                   <td className="px-4 py-3">{formatarData(dataEntrada)}</td>
                 </tr>
               );
             })
           ) : (
             <tr>
-              <td
-                colSpan={7}
-                className="px-4 py-8 text-center text-zinc-500 font-medium"
-              >
+              <td colSpan={7} className="px-4 py-8 text-center text-zinc-500 font-medium">
                 Nenhum lead encontrado.
               </td>
             </tr>
