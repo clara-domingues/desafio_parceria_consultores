@@ -34,18 +34,14 @@ export default function LeadsFilters({
   onFilterChange,
   leads: propsLeads,
 }: LeadsFiltersProps) {
-  // Pega o estado do contexto de forma segura
-  const context = useLeads?.() as unknown as { leads?: unknown[] };
+  // Pega contexto e funções globais de atualização
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const contextLeads = (context?.leads || []) as any[];
+  const context = useLeads?.() as any;
+  const contextLeads = context?.leads || [];
 
-  // Estado local para digitação
   const [internalFilters, setInternalFilters] = useState<FilterState>(DEFAULT_FILTERS);
-
-  // Se propFilters for fornecido via props, ele tem prioridade; caso contrário, usamos o interno.
   const activeFilters = propFilters || internalFilters;
 
-  // Define qual lista de leads vai ser exportada
   const leadsToExport =
     propsLeads && propsLeads.length > 0 ? propsLeads : contextLeads;
 
@@ -58,12 +54,19 @@ export default function LeadsFilters({
       [name]: value,
     };
 
-    // Atualiza o estado local
+    // Atualiza estado local
     setInternalFilters(updatedFilters);
 
-    // Notifica o pai se callback existir
+    // Se houver callback prop (ex: no LeadsView), avisa o pai
     if (onFilterChange) {
       onFilterChange(updatedFilters);
+    }
+
+    // Atualiza o filtro global do Contexto para refletir no Kanban/Tabela
+    if (context?.setFilters) {
+      context.setFilters(updatedFilters);
+    } else if (name === "search" && context?.setSearchTerm) {
+      context.setSearchTerm(value);
     }
   };
 
