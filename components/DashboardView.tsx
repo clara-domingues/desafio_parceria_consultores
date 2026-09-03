@@ -13,6 +13,7 @@ export interface Lead {
   responsavel_id?: string | null;
   responsavel?: { nome?: string } | string | null;
   created_at?: string | null;
+  updated_at?: string | null;
   data_entrada?: string | null;
 }
 
@@ -27,6 +28,24 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ leads = [] }) => {
   const valorPipeline = leads.reduce((acc, lead) => {
     return acc + (lead.valor_potencial ?? lead.valor ?? 0);
   }, 0);
+
+  // Cálculo de Leads Estagnados (+7 Dias)
+  const seteDiasAtras = new Date();
+  seteDiasAtras.setDate(seteDiasAtras.getDate() - 7);
+
+  const leadsEstagnadosCount = leads.filter((l) => {
+    const dataRef = l.updated_at || l.created_at || l.data_entrada;
+    if (!dataRef) return false;
+
+    const dataAtualizacao = new Date(dataRef);
+    const st = (l.status || "").toLowerCase();
+
+    return (
+      dataAtualizacao < seteDiasAtras &&
+      st !== "ganho" &&
+      st !== "perdido"
+    );
+  }).length;
 
   const negociosGanhos = leads.filter(
     (l) => l.status?.toLowerCase() === "ganho"
@@ -133,13 +152,14 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ leads = [] }) => {
   return (
     <div className="space-y-6 text-white">
       {/* CARDS DE MÉTRICAS */}
-      <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
         <div className="bg-zinc-900 border border-zinc-800 p-4 rounded-lg">
           <p className="text-xs text-zinc-400 font-semibold uppercase">
             Total de Leads
           </p>
           <h3 className="text-2xl font-bold mt-2">{totalLeads}</h3>
         </div>
+
         <div className="bg-zinc-900 border border-zinc-800 p-4 rounded-lg">
           <p className="text-xs text-zinc-400 font-semibold uppercase">
             Valor do Pipeline
@@ -148,6 +168,17 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ leads = [] }) => {
             {formatarMoeda(valorPipeline)}
           </h3>
         </div>
+
+        {/* CARD DE LEADS ESTAGNADOS */}
+        <div className="bg-zinc-900 border border-zinc-800 p-4 rounded-lg">
+          <p className="text-xs text-zinc-400 font-semibold uppercase">
+            Estagnados (+7D)
+          </p>
+          <h3 className="text-2xl font-bold text-amber-500 mt-2">
+            {leadsEstagnadosCount}
+          </h3>
+        </div>
+
         <div className="bg-zinc-900 border border-zinc-800 p-4 rounded-lg">
           <p className="text-xs text-zinc-400 font-semibold uppercase">
             Negócios Ganhos
@@ -156,6 +187,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ leads = [] }) => {
             {formatarMoeda(valorGanhos)}
           </h3>
         </div>
+
         <div className="bg-zinc-900 border border-zinc-800 p-4 rounded-lg">
           <p className="text-xs text-zinc-400 font-semibold uppercase">
             Taxa de Conversão
@@ -164,6 +196,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ leads = [] }) => {
             {taxaConversao}%
           </h3>
         </div>
+
         <div className="bg-zinc-900 border border-zinc-800 p-4 rounded-lg">
           <p className="text-xs text-zinc-400 font-semibold uppercase">
             Ticket Médio
@@ -221,7 +254,9 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ leads = [] }) => {
                       className="w-2.5 h-2.5 rounded-full inline-block"
                       style={{ backgroundColor: coresOrigem[nome] }}
                     />
-                    <span className="truncate">{nome} ({pct}%)</span>
+                    <span className="truncate">
+                      {nome} ({pct}%)
+                    </span>
                   </div>
                 );
               })}
@@ -231,7 +266,9 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ leads = [] }) => {
 
         {/* GRÁFICO 3: CLASSIFICAÇÃO DOS LEADS */}
         <div className="bg-zinc-900 border border-zinc-800 p-6 rounded-lg">
-          <h4 className="text-lg font-semibold mb-6">Classificação dos Leads</h4>
+          <h4 className="text-lg font-semibold mb-6">
+            Classificação dos Leads
+          </h4>
           <div className="space-y-5 pt-2">
             <div>
               <div className="flex justify-between text-sm mb-1">

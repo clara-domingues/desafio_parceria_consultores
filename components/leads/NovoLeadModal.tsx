@@ -35,8 +35,6 @@ const ESTADO_INICIAL = {
   observacoes: "",
 };
 
-// Extrai uma mensagem legível tanto de Error nativo quanto de erros do
-// Supabase/Postgres, que são objetos simples com .message, não instâncias de Error.
 function extrairMensagemErro(err: unknown): string {
   if (err instanceof Error) return err.message;
   if (typeof err === "object" && err !== null && "message" in err) {
@@ -67,27 +65,42 @@ export const NovoLeadModal: React.FC<NovoLeadModalProps> = ({
 
   if (!isOpen) return null;
 
+  const handleFechar = () => {
+    setAvisoDuplicidade(null);
+    setFormData(ESTADO_INICIAL);
+    onClose();
+  };
+
   const handleChange = (
     e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>
   ) => {
     const { name, value } = e.target;
+    if (avisoDuplicidade) setAvisoDuplicidade(null);
     setFormData((prev) => ({
       ...prev,
       [name]: name === "valor_potencial" ? Number(value) : value,
     }));
   };
 
-  const verificarDuplicidade = async (email: string) => {
-    const { data, error } = await supabase
+  const verificarDuplicidade = async (email: string, telefone: string) => {
+    const query = supabase
       .from("leads")
-      .select("id, empresa")
-      .eq("email", email)
-      .maybeSingle();
+      .select("id, nome_contato, empresa, email, telefone");
+
+    const filtros: string[] = [];
+    if (email.trim()) filtros.push(`email.eq.${email.trim()}`);
+    if (telefone.trim()) filtros.push(`telefone.eq.${telefone.trim()}`);
+
+    if (filtros.length === 0) return null;
+
+    const { data, error } = await query.or(filtros.join(",")).limit(1);
 
     if (error) {
       console.error("Erro ao verificar duplicidade:", extrairMensagemErro(error));
+      return null;
     }
-    return data;
+
+    return data && data.length > 0 ? data[0] : null;
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -95,19 +108,26 @@ export const NovoLeadModal: React.FC<NovoLeadModalProps> = ({
     setLoading(true);
 
     try {
-      // 1. Checagem de duplicidade — só bloqueia se ainda não foi avisado
-      const existente = await verificarDuplicidade(formData.email);
-      if (existente && !avisoDuplicidade) {
-        setAvisoDuplicidade(
-          `Já existe um lead com esse e-mail (${existente.empresa ?? "sem empresa"}). Envie de novo para confirmar mesmo assim.`
+      if (!avisoDuplicidade) {
+        const existente = await verificarDuplicidade(
+          formData.email,
+          formData.telefone
         );
-        setLoading(false);
-        return;
+
+        if (existente) {
+          const nomeExistente =
+            existente.nome_contato || existente.empresa || "já cadastrado";
+          setAvisoDuplicidade(
+            `⚠️ Lead duplicado detectado: Já existe um cadastro com este e-mail/telefone (${nomeExistente}). Clique em "Confirmar mesmo assim" se desejar prosseguir.`
+          );
+          setLoading(false);
+          return;
+        }
       }
 
-      // 2. Classificação automática (Automação 1) — regra + IA, via API
       let classificacao = "Frio";
-      let classificacaoMotivo = "Classificação baseada em valor, origem e prazo de fechamento.";
+      let classificacaoMotivo =
+        "Classificação baseada em valor, origem e prazo de fechamento.";
 
       try {
         const respostaClassificacao = await fetch("/api/classificar", {
@@ -124,10 +144,12 @@ export const NovoLeadModal: React.FC<NovoLeadModalProps> = ({
         classificacao = dadosClassificacao.classificacao;
         classificacaoMotivo = dadosClassificacao.justificativa;
       } catch (erroClassificacao) {
-        console.error("Falha ao classificar automaticamente, usando padrão:", extrairMensagemErro(erroClassificacao));
+        console.error(
+          "Falha ao classificar automaticamente, usando padrão:",
+          extrairMensagemErro(erroClassificacao)
+        );
       }
 
-      // 3. Inserção do lead já com a classificação resolvida
       const { error } = await supabase.from("leads").insert([
         {
           nome_contato: formData.nome_contato,
@@ -150,7 +172,7 @@ export const NovoLeadModal: React.FC<NovoLeadModalProps> = ({
       if (error) throw error;
 
       if (onSuccess) onSuccess();
-      onClose();
+      handleFechar();
     } catch (err: unknown) {
       const errorMsg = extrairMensagemErro(err);
       console.error("Erro ao cadastrar lead:", errorMsg, err);
@@ -166,7 +188,9 @@ export const NovoLeadModal: React.FC<NovoLeadModalProps> = ({
         <h2 className="text-xl font-bold mb-4">Cadastrar Novo Lead</h2>
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
-            <label className="block text-sm text-zinc-400 mb-1">Nome do Contato *</label>
+            <label className="block text-sm text-zinc-400 mb-1">
+              Nome do Contato *
+            </label>
             <input
               type="text"
               name="nome_contato"
@@ -190,7 +214,9 @@ export const NovoLeadModal: React.FC<NovoLeadModalProps> = ({
 
           <div className="grid grid-cols-2 gap-4">
             <div>
-              <label className="block text-sm text-zinc-400 mb-1">E-mail *</label>
+              <label className="block text-sm text-zinc-400 mb-1">
+                E-mail *
+              </label>
               <input
                 type="email"
                 name="email"
@@ -201,7 +227,9 @@ export const NovoLeadModal: React.FC<NovoLeadModalProps> = ({
               />
             </div>
             <div>
-              <label className="block text-sm text-zinc-400 mb-1">Telefone</label>
+              <label className="block text-sm text-zinc-400 mb-1">
+                Telefone
+              </label>
               <input
                 type="text"
                 name="telefone"
@@ -214,7 +242,9 @@ export const NovoLeadModal: React.FC<NovoLeadModalProps> = ({
 
           <div className="grid grid-cols-2 gap-4">
             <div>
-              <label className="block text-sm text-zinc-400 mb-1">Origem</label>
+              <label className="block text-sm text-zinc-400 mb-1">
+                Origem
+              </label>
               <select
                 name="origem"
                 value={formData.origem}
@@ -222,12 +252,16 @@ export const NovoLeadModal: React.FC<NovoLeadModalProps> = ({
                 className="w-full bg-zinc-800 border border-zinc-700 rounded px-3 py-2 text-white focus:outline-none focus:border-blue-500"
               >
                 {ORIGENS.map((o) => (
-                  <option key={o.valor} value={o.valor}>{o.rotulo}</option>
+                  <option key={o.valor} value={o.valor}>
+                    {o.rotulo}
+                  </option>
                 ))}
               </select>
             </div>
             <div>
-              <label className="block text-sm text-zinc-400 mb-1">Segmento</label>
+              <label className="block text-sm text-zinc-400 mb-1">
+                Segmento
+              </label>
               <input
                 type="text"
                 name="segmento"
@@ -241,7 +275,9 @@ export const NovoLeadModal: React.FC<NovoLeadModalProps> = ({
 
           <div className="grid grid-cols-2 gap-4">
             <div>
-              <label className="block text-sm text-zinc-400 mb-1">Responsável</label>
+              <label className="block text-sm text-zinc-400 mb-1">
+                Responsável
+              </label>
               <select
                 name="responsavel_id"
                 value={formData.responsavel_id}
@@ -250,12 +286,16 @@ export const NovoLeadModal: React.FC<NovoLeadModalProps> = ({
               >
                 <option value="">Selecione...</option>
                 {usuarios.map((u) => (
-                  <option key={u.id} value={u.id}>{u.nome}</option>
+                  <option key={u.id} value={u.id}>
+                    {u.nome}
+                  </option>
                 ))}
               </select>
             </div>
             <div>
-              <label className="block text-sm text-zinc-400 mb-1">Valor Potencial (R$)</label>
+              <label className="block text-sm text-zinc-400 mb-1">
+                Valor Potencial (R$)
+              </label>
               <input
                 type="number"
                 name="valor_potencial"
@@ -269,7 +309,9 @@ export const NovoLeadModal: React.FC<NovoLeadModalProps> = ({
 
           <div className="grid grid-cols-2 gap-4">
             <div>
-              <label className="block text-sm text-zinc-400 mb-1">Data de Entrada</label>
+              <label className="block text-sm text-zinc-400 mb-1">
+                Data de Entrada
+              </label>
               <input
                 type="date"
                 name="data_entrada"
@@ -279,7 +321,9 @@ export const NovoLeadModal: React.FC<NovoLeadModalProps> = ({
               />
             </div>
             <div>
-              <label className="block text-sm text-zinc-400 mb-1">Previsão de Fechamento</label>
+              <label className="block text-sm text-zinc-400 mb-1">
+                Previsão de Fechamento
+              </label>
               <input
                 type="date"
                 name="previsao_fechamento"
@@ -291,7 +335,9 @@ export const NovoLeadModal: React.FC<NovoLeadModalProps> = ({
           </div>
 
           <div>
-            <label className="block text-sm text-zinc-400 mb-1">Observações</label>
+            <label className="block text-sm text-zinc-400 mb-1">
+              Observações
+            </label>
             <textarea
               name="observacoes"
               rows={3}
@@ -309,13 +355,14 @@ export const NovoLeadModal: React.FC<NovoLeadModalProps> = ({
           )}
 
           <p className="text-xs text-zinc-500">
-            A classificação (Quente/Morno/Frio) é calculada automaticamente ao salvar, com base no valor, origem e observações.
+            A classificação (Quente/Morno/Frio) é calculada automaticamente ao
+            salvar, com base no valor, origem e observações.
           </p>
 
           <div className="flex justify-end gap-3 pt-2">
             <button
               type="button"
-              onClick={onClose}
+              onClick={handleFechar}
               className="px-4 py-2 bg-zinc-800 hover:bg-zinc-700 rounded text-sm text-zinc-300"
             >
               Cancelar
@@ -323,9 +370,13 @@ export const NovoLeadModal: React.FC<NovoLeadModalProps> = ({
             <button
               type="submit"
               disabled={loading}
-              className="px-4 py-2 bg-blue-600 hover:bg-blue-500 rounded text-sm font-semibold disabled:opacity-50"
+              className="px-4 py-2 bg-blue-600 hover:bg-blue-500 rounded text-sm font-semibold disabled:opacity-50 transition"
             >
-              {loading ? "Salvando..." : avisoDuplicidade ? "Confirmar mesmo assim" : "Salvar Lead"}
+              {loading
+                ? "Salvando..."
+                : avisoDuplicidade
+                ? "Confirmar mesmo assim"
+                : "Salvar Lead"}
             </button>
           </div>
         </form>

@@ -1,6 +1,7 @@
 "use client";
 
 import { useSearchParams, useRouter, usePathname } from "next/navigation";
+import { useEffect, useState } from "react";
 
 export interface Usuario {
   id: string;
@@ -16,8 +17,10 @@ export default function LeadsFilters({ usuarios = [] }: LeadsFiltersProps) {
   const pathname = usePathname();
   const { replace } = useRouter();
 
+  const [buscaTexto, setBuscaTexto] = useState(searchParams.get("busca")?.toString() || "");
+
   const handleFilter = (key: string, value: string) => {
-    const params = new URLSearchParams(searchParams);
+    const params = new URLSearchParams(searchParams.toString());
     if (value && value !== "todos" && value !== "todas") {
       params.set(key, value);
     } else {
@@ -26,6 +29,18 @@ export default function LeadsFilters({ usuarios = [] }: LeadsFiltersProps) {
     replace(`${pathname}?${params.toString()}`);
   };
 
+  // Debounce para evitar buscas a cada tecla digitada
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      const paramAtual = searchParams.get("busca") || "";
+      if (buscaTexto !== paramAtual) {
+        handleFilter("busca", buscaTexto);
+      }
+    }, 400);
+
+    return () => clearTimeout(timer);
+  }, [buscaTexto]);
+
   return (
     <div className="flex flex-wrap items-center gap-3 bg-zinc-900/80 p-4 rounded-xl border border-zinc-800">
       {/* Campo de Busca */}
@@ -33,8 +48,8 @@ export default function LeadsFilters({ usuarios = [] }: LeadsFiltersProps) {
         <input
           type="text"
           placeholder="Buscar por nome, e-mail ou empresa..."
-          defaultValue={searchParams.get("busca")?.toString()}
-          onChange={(e) => handleFilter("busca", e.target.value)}
+          value={buscaTexto}
+          onChange={(e) => setBuscaTexto(e.target.value)}
           className="w-full bg-zinc-950 border border-zinc-800 rounded-lg px-3 py-2 text-sm text-white placeholder-zinc-500 focus:outline-none focus:border-zinc-600"
         />
       </div>
@@ -44,7 +59,7 @@ export default function LeadsFilters({ usuarios = [] }: LeadsFiltersProps) {
         <input
           type="date"
           name="dataInicio"
-          defaultValue={searchParams.get("dataInicio")?.toString()}
+          defaultValue={searchParams.get("dataInicio")?.toString() || ""}
           onChange={(e) => handleFilter("dataInicio", e.target.value)}
           className="bg-zinc-950 border border-zinc-800 rounded-lg px-2.5 py-2 text-sm text-zinc-300 focus:outline-none focus:border-zinc-600"
         />
@@ -52,7 +67,7 @@ export default function LeadsFilters({ usuarios = [] }: LeadsFiltersProps) {
         <input
           type="date"
           name="dataFim"
-          defaultValue={searchParams.get("dataFim")?.toString()}
+          defaultValue={searchParams.get("dataFim")?.toString() || ""}
           onChange={(e) => handleFilter("dataFim", e.target.value)}
           className="bg-zinc-950 border border-zinc-800 rounded-lg px-2.5 py-2 text-sm text-zinc-300 focus:outline-none focus:border-zinc-600"
         />
@@ -60,7 +75,7 @@ export default function LeadsFilters({ usuarios = [] }: LeadsFiltersProps) {
 
       {/* Filtro Status */}
       <select
-        defaultValue={searchParams.get("status") || "todos"}
+        value={searchParams.get("status") || "todos"}
         onChange={(e) => handleFilter("status", e.target.value)}
         className="bg-zinc-950 border border-zinc-800 rounded-lg px-3 py-2 text-sm text-zinc-300 focus:outline-none focus:border-zinc-600"
       >
@@ -75,7 +90,7 @@ export default function LeadsFilters({ usuarios = [] }: LeadsFiltersProps) {
 
       {/* Filtro Origem */}
       <select
-        defaultValue={searchParams.get("origem") || "todas"}
+        value={searchParams.get("origem") || "todas"}
         onChange={(e) => handleFilter("origem", e.target.value)}
         className="bg-zinc-950 border border-zinc-800 rounded-lg px-3 py-2 text-sm text-zinc-300 focus:outline-none focus:border-zinc-600"
       >
@@ -89,7 +104,7 @@ export default function LeadsFilters({ usuarios = [] }: LeadsFiltersProps) {
 
       {/* Filtro Responsável */}
       <select
-        defaultValue={searchParams.get("responsavel") || "todos"}
+        value={searchParams.get("responsavel") || "todos"}
         onChange={(e) => handleFilter("responsavel", e.target.value)}
         className="bg-zinc-950 border border-zinc-800 rounded-lg px-3 py-2 text-sm text-zinc-300 focus:outline-none focus:border-zinc-600"
       >
