@@ -1,130 +1,133 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+#  Mini CRM — Desafio Técnico Parceria Consultores
 
-## Getting Started
+Protótipo de CRM comercial web desenvolvido para o processo seletivo da área de Tecnologia, Automação e Dados da **Parceria Consultores**.
 
-First, run the development server:
+**Autora:** Clara Domingues  
+**Deploy:** [https://desafio-parceria-consultores-xp3h.vercel.app](https://desafio-parceria-consultores-xp3h.vercel.app)  
+**Repositório:** [https://github.com/clara-domingues/desafio_parceria_consultores](https://github.com/clara-domingues/desafio_parceria_consultores)  
+**Servidor Discord (Alertas de Leads Estagnados):** [https://discord.gg/dkHSNXaEB](https://discord.gg/dkHSNXaEB)
 
-```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
-```
-
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
-
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
-
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
-
-## Learn More
-
-To learn more about Next.js, take a look at the following resources:
-
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
-
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
-
-## Deploy on Vercel
-
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
-
-# Mini CRM — Desafio Técnico Parceria Consultores
-
-Protótipo de CRM comercial desenvolvido para o processo seletivo de Tecnologia, Automação e Dados da Parceria Consultores.
-
-**Autora:** Clara Domingues
-**Deploy:** https://desafio-parceria-consultores-xp3h.vercel.app
-**Repositório:** https://github.com/clara-domingues/desafio_parceria_consultores
+---
 
 ## Objetivo
 
-Aplicação web para gerenciamento de leads comerciais, acompanhando cada oportunidade desde a entrada até a conversão ou perda, com automações, dashboard gerencial e uso de IA integrado ao fluxo de trabalho.
+Aplicação web desenvolvida para a centralização, acompanhamento e otimização do funil de vendas comercial. O sistema permite gerenciar contatos desde a prospecção inicial até a conversão em cliente ou perda, contando com automações de regras, visão gerencial em tempo real e assistente de Inteligência Artificial para qualificação e apoio à tomada de decisão.
 
-## Stack e decisões técnicas
+---
 
-- **Frontend + Backend: Next.js (App Router) + TypeScript + Tailwind CSS**
-  Escolhido por unificar interface e rotas de API num único projeto — as automações (classificação, conversão, notificação) vivem como rotas de API do próprio Next.js, sem precisar de um backend separado.
-- **Banco de dados: PostgreSQL via Supabase**
-  Relacional, o que se encaixa naturalmente no modelo de dados (lead → histórico, lead → cliente). O Supabase também entrega autenticação e políticas de acesso (Row Level Security) prontas, o que evita construir esse sistema do zero.
-- **Kanban: `@hello-pangea/dnd`** — drag and drop entre as etapas do pipeline.
-- **Gráficos: Recharts** — dashboard com barras (leads por etapa), pizza (origem) e barra de progresso (classificação).
-- **IA: Google Gemini API** — detalhado na seção "Uso de IA".
-- **Automação agendada: n8n** — dispara a notificação de leads estagnados.
-- **Deploy: Vercel.**
+##  Stack Tecnológica & Decisões Técnicas
 
-## Estrutura do banco de dados
+- **Frontend & Backend:** `Next.js` (App Router) + `TypeScript` + `Tailwind CSS`  
+  *Decisão:* Escolhido por unificar a interface e as rotas de API em um único repositório — as automações (classificação, conversão, notificação) operam como Serverless Route Handlers do próprio Next.js.
+- **Banco de Dados:** `PostgreSQL` via `Supabase`  
+  *Decisão:* Estrutura relacional nativa adequada ao modelo comercial (Lead → Histórico, Lead → Cliente). O Supabase oferece autenticação e políticas de acesso (Row Level Security).
+- **Kanban (Drag and Drop):** `@hello-pangea/dnd` para a movimentação fluida dos cards entre as colunas do funil.
+- **Gráficos & Dashboards:** `Recharts` para geração de gráficos dinâmicos (distribuição por etapas, origens e barra de progresso).
+- **Inteligência Artificial:** `Google Gemini API` integrada nas automações e análises do modal.
+- **Automação Agendada & Integrador:** `n8n` para orquestração da notificação de leads estagnados e disparo via **Discord Webhook**.
+- **Deploy & Hospedagem:** `Vercel`.
 
-- **`leads`** — entidade principal: nome do contato, empresa, e-mail, telefone, origem, segmento, responsável, status, valor potencial, datas de entrada/fechamento, observações, além de `classificacao` e `classificacao_motivo` (preenchidos pela Automação 1) e `ultima_notificacao_estagnacao` (controle da notificação de inatividade).
-- **`usuarios`** — responsáveis comerciais; `leads.responsavel_id` referencia esta tabela.
-- **`historico`** — uma linha por alteração relevante de um lead (status, responsável, valor, conversão), referenciando `leads.id`. Optei por uma tabela separada em vez de um campo JSON dentro de `leads` para permitir consultas diretas (ex: quantas mudanças de status um lead teve) e para o dashboard/timeline não depender de parsear JSON.
-- **`clientes`** — criada automaticamente pela Automação 2 quando um lead vira "Ganho", referenciando o lead de origem via `lead_origem_id`.
-- **`notificacoes`** — avisos internos (conversão e leads estagnados), ligados a `usuarios` e `leads`.
+---
 
-O campo `status` é um `enum` do Postgres (`Novo`, `Qualificação`, `Proposta`, `Negociação`, `Ganho`, `Perdido`), garantindo que nenhum valor inconsistente seja salvo.
+##  Estrutura do Banco de Dados
 
-## Gestão do pipeline
+- **`leads`**: Entidade principal contendo dados cadastrais (nome, empresa, e-mail, telefone, origem, segmento, responsável, status, valor potencial, datas de entrada/fechamento e observações), além dos campos `classificacao` e `classificacao_motivo` (Automação 1) e `ultima_notificacao_estagnacao`.
+- **`usuarios`**: Tabela de responsáveis comerciais (referenciada por `leads.responsavel_id`).
+- **`historico`**: Registro cronológico de auditoria por alteração relevante (status, responsável, valor, conversão), referenciando `leads.id`. Permite consultas estruturadas de métricas sem necessidade de parsear campos JSON.
+- **`clientes`**: Registros gerados automaticamente pela Automação 2 quando um lead é movido para a etapa "Ganho", vinculando o `lead_origem_id`.
+- **`notificacoes`**: Avisos internos do sistema (conversão e estagnação de leads) vinculados aos usuários e leads.
 
-Interface combinando **Kanban** (visão padrão) e **Tabela**, com busca por nome/e-mail/empresa, filtros por status, origem, responsável e período de entrada, e ordenação clicável por valor e data. Cada lead pode ser editado (todos os campos, incluindo status e responsável) diretamente pelo modal de detalhes, e cada alteração relevante é registrada no histórico.
+> **Validação de Dados:** O campo `status` utiliza um tipo `enum` do PostgreSQL (`Novo`, `Qualificação`, `Proposta`, `Negociação`, `Ganho`, `Perdido`), garantindo a consistência das etapas no banco de dados.
 
-## Automações
+---
 
-### Automação 1 — Qualificação (regra + IA)
-Ao cadastrar um lead, a rota `/api/classificar` calcula um score com base em três critérios objetivos: valor potencial, origem do lead e proximidade da previsão de fechamento. Esse score define Quente/Morno/Frio. Quando o campo "Observações" está preenchido, a Gemini API analisa o texto e pode ajustar o score em ±1 ponto, capturando sinais de urgência que a regra sozinha não capta (ex: "cliente quer fechar essa semana"). Se a chamada à IA falhar, o sistema usa só a regra — o cadastro nunca trava por causa da IA.
+##  Gestão do Pipeline (Kanban e Tabela)
 
-### Automação 2 — Conversão
-Quando um lead é movido para "Ganho" (via Kanban ou edição manual), a rota `/api/converter-lead` cria automaticamente um registro em `clientes`, gera uma notificação para o responsável e registra a conversão no histórico. Uma checagem evita duplicar o cliente caso o mesmo lead seja movido para "Ganho" mais de uma vez.
+Interface adaptável oferecendo duas visualizações do funil:
+1. **Visão Kanban (Padrão):** Colunas organizadas por etapas com suporte a *drag and drop* para transição rápida de status.
+2. **Visão Tabela:** Visualização em lista estruturada com busca global (nome, e-mail, empresa), filtros combinados por status, origem, responsável e intervalo de datas de entrada, além de ordenação por valor e data.
 
-### Notificação automática (7+ dias sem atualização)
-Um workflow no n8n roda em um agendamento fixo e chama `/api/leads-estagnados`, que retorna os leads sem atualização há 7+ dias (excluindo Ganho/Perdido) e ainda não notificados recentemente. Para cada um, o n8n chama `/api/notificar-estagnado`, que registra a notificação e marca a data do aviso, evitando notificar o mesmo lead repetidamente. Separei essa lógica em duas rotas de propósito: a regra de negócio (o que conta como "estagnado") fica no código, testável e versionada; o n8n cuida só do agendamento — se um dia eu trocar de ferramenta de automação, só troco quem chama a API.
+Cada lead possui um **Modal de Detalhes** que permite edição completa das informações cadastrais, geração de insumos via IA e auditoria do histórico de modificações.
 
-## Uso de IA
+---
 
-- **Desenvolvimento:** o projeto foi construído com apoio do Claude (Claude Code) e Claude via chat, usados para gerar e revisar componentes React, rotas de API, queries SQL, e depurar erros de build e runtime. Todo código gerado foi testado manualmente antes de aceito — nem todo código gerado por IA funcionou de primeira (ver seção seguinte).
-- **Classificação de leads (Automação 1):** Google Gemini API, como ajuste fino sobre uma regra determinística.
-- **Resumo Inteligente do lead:** Gemini API gera uma síntese executiva de 2-3 frases a partir dos dados cadastrais do lead, disponível sob demanda no modal de detalhes.
-- **Sugestão de Próxima Ação:** Gemini API sugere uma ação comercial concreta com base no status, valor, origem e observações do lead.
+##  Automações Implementadas
 
-## Dificuldades encontradas e como foram resolvidas
+### Automação 1 — Qualificação de Leads (Regra + IA)
+Ao cadastrar um novo lead, a rota `/api/classificar` calcula um score baseado em três critérios objetivos: valor potencial, origem do lead e proximidade do fechamento (definindo a temperatura em *Quente*, *Morno* ou *Frio*). Se houver texto no campo "Observações", a Gemini API analisa o contexto e ajusta a pontuação em ±1 ponto para capturar urgências. Caso ocorra alguma oscilação na API de IA, o sistema mantém a classificação via regra determinística sem travar o cadastro.
 
-- **Desalinhamento entre nomes de status no código e no enum do banco.** Em alguns momentos o front-end usava valores diferentes dos aceitos pelo Postgres (ex: `qualificacao` minúsculo sem acento vs. `Qualificação` no enum), o que causava erros silenciosos ao mover leads no Kanban. Resolvido padronizando os 6 valores oficiais (`Novo, Qualificação, Proposta, Negociação, Ganho, Perdido`) em todos os arquivos e migrando os dados já existentes no banco.
-- **Modelo de IA descontinuado em produção.** O modelo `gemini-2.0-flash` parou de responder durante o desenvolvimento (a Google o descontinuou). Identificado lendo a mensagem de erro retornada pela própria API, que já indicava o modelo substituto, e corrigido trocando a referência do modelo nas duas rotas que usam IA.
-- **Duplicação de arquivos gerados por IA.** Em algumas iterações rápidas com ferramentas de IA, componentes e pastas foram recriados em locais diferentes (ex: `components/leads/` vs. uma pasta duplicada), causando conflitos de importação. Resolvido consolidando os arquivos em um único local e adicionando instruções de convenção de projeto para reduzir recorrência.
-- **Variáveis de ambiente ausentes no ambiente de produção.** O deploy na Vercel ficou preso em estado de carregamento porque as chaves do Supabase (guardadas apenas em `.env.local`, fora do controle de versão por segurança) nunca haviam sido configuradas manualmente no painel da Vercel. Resolvido cadastrando as variáveis nas configurações do projeto e forçando um novo deploy.
-- **URL de preview protegida bloqueando a automação externa.** O workflow do n8n falhava ao consultar a API porque a URL usada era uma URL de preview da Vercel, que exige login — n8n recebia uma página HTML de autenticação em vez de JSON. Resolvido usando a URL de produção estável (sem o sufixo de preview) na configuração do workflow.
+### Automação 2 — Conversão em Cliente
+Ao mover um lead para a etapa "Ganho" (seja via Kanban ou edição manual), a rota `/api/converter-lead` cria o registro correspondente na tabela `clientes`, notifica o responsável e registra o evento no histórico. O sistema possui trava de duplicidade para impedir que o mesmo lead seja convertido múltiplos momentos.
 
-## Diferenciais implementados
+### Automação 3 — Notificação de Leads Estagnados via Discord (7+ Dias)
+Um workflow agendado no **n8n** realiza chamadas periódicas para a rota `/api/leads-estagnados`, identificando negociações sem movimentação há 7 dias ou mais (excluindo etapas finais). Em seguida, o n8n dispara as mensagens de alerta diretamente para o canal da equipe no **Discord via Webhook** ([Entre no servidor para conferir](https://discord.gg/dkHSNXaEB)) e aciona a rota `/api/notificar-estagnado` para atualizar a data do último aviso no banco, evitando alertas repetitivos.
 
-- Interface Kanban (com Tabela como visão alternativa)
-- Edição completa do lead, incluindo status e responsável, com histórico de mudanças
-- Detecção de duplicidade por e-mail (aviso não bloqueante, permite confirmar mesmo assim)
-- Exportação de dados em CSV
-- IA para resumo do lead
-- IA para sugestão de próxima ação comercial
-- Deploy em ambiente acessível (Vercel)
+---
 
-## Próximos passos (com mais 2 semanas)
+##  Uso de Inteligência Artificial
 
-- Login e autenticação de usuários (a base já existe via Supabase Auth, falta conectar ao fluxo da aplicação)
-- Controle de permissões por papel (vendedor vs. gestor)
-- Importação de leads via CSV
-- Testes automatizados para as rotas de automação (classificação, conversão, notificação)
-- Revisão e ajustes finos de responsividade mobile
-- Evoluir a detecção de duplicidade para considerar também telefone e variações de texto (maiúsculas/acentos)
+- **Assistente de Desenvolvimento (Vibe Coding):** Utilização do Claude (Claude Code e Chat) para prototipagem de componentes React, construção de rotas de API Next.js, modelagem de queries SQL e depuração de código.
+- **Qualificação Contextual (Automação 1):** Chamadas à Gemini API para ajuste de pontuação de leads com base no campo de observações.
+- **Resumo Inteligente:** Botão no modal do lead que aciona a Gemini API para gerar uma síntese executiva de 2 a 3 frases sobre o estado da negociação.
+- **Sugestão de Próxima Ação:** Módulo de IA no modal que fornece recomendações estratégicas imediatas ao vendedor para dar andamento ao ciclo de vendas.
 
-## Como rodar localmente
+---
 
+## Dificuldades Encontradas e Soluções
+
+- **Desalinhamento de Enums no Postgres:** Divergência entre a grafia dos status no frontend e no banco de dados (ex: `qualificacao` vs `Qualificação`). Solucionado com a padronização e tipagem estática das 6 etapas oficiais em toda a aplicação.
+- **Depreciação de Modelo de IA:** O modelo `gemini-2.0-flash` foi descontinuado durante o desenvolvimento. O erro foi identificado no log da API e corrigido pela atualização para a versão estável mais recente do modelo Gemini nas rotas Serverless.
+- **Duplicação de Componentes:** Inconsistências de diretórios durante a geração de código via IA. Resolvido mediante consolidação da estrutura de arquivos na convenção do Next.js App Router.
+- **Variáveis de Ambiente na Vercel:** Falha na inicialização em produção devido à ausência das chaves do Supabase na plataforma de deploy. Solucionado com o cadastro manual das variáveis no painel da Vercel e re-deploy da aplicação.
+- **Autenticação em URLs de Preview:** O workflow do n8n recebia bloqueios de acesso ao tentar consumir a API em URLs de preview protegidas da Vercel. Solucionado fixando o endpoint oficial no domínio de produção estável.
+
+---
+
+## Diferenciais Implementados
+
+- [x] Alternância de visões entre Kanban interativo e Tabela
+- [x] Edição cadastral completa com histórico de auditoria
+- [x] Validação preventiva de duplicidade por e-mail e telefone
+- [x] Exportação de dados filtrados em formato CSV
+- [x] Síntese de contexto do cliente via Resumo Inteligente (IA)
+- [x] Recomendação estratégica de vendas via Próxima Ação (IA)
+- [x] Orquestração de tarefas agendadas via n8n com integração Webhook no Discord
+- [x] Publicação e deploy em produção na Vercel
+
+---
+
+## Próximos Passos (Melhorias com mais duas semanas)
+
+- Implementação de tela de login e controle de sessão via Supabase Auth
+- Controle de acesso baseado em funções (RBAC: Vendedor vs. Gestor)
+- Funcionalidade para importação em massa de leads via arquivo CSV
+- Cobertura de testes automatizados (unitários e de integração) para as rotas de API
+- Evolução do algoritmo de duplicidade com busca por semelhança textual (fuzzy search)
+
+---
+
+## Como Rodar o Projeto Localmente
+
+1. **Clonar o repositório:**
 ```bash
+git clone (https://github.com/clara-domingues/desafio_parceria_consultores.git)
+cd desafio_parceria_consultores
+Instalar as dependências:
+
+Bash
 npm install
-# Configurar .env.local com:
-# NEXT_PUBLIC_SUPABASE_URL=
-# NEXT_PUBLIC_SUPABASE_ANON_KEY=
-# GEMINI_API_KEY=
+Configurar as Variáveis de Ambiente:
+Crie um arquivo .env.local na raiz do projeto com as seguintes chaves:
+
+Snippet de código
+NEXT_PUBLIC_SUPABASE_URL=sua_url_do_supabase
+NEXT_PUBLIC_SUPABASE_ANON_KEY=sua_chave_anon_do_supabase
+GEMINI_API_KEY=sua_chave_da_api_gemini
+Iniciar o servidor de desenvolvimento:
+
+Bash
 npm run dev
-```
+Acesse http://localhost:3000 no seu navegador.
+
+
+--
