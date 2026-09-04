@@ -32,7 +32,7 @@ Observações registradas pelo vendedor: ${lead.observacoes || "nenhuma"}
       : `Você é um assistente comercial. Com base nos dados abaixo, sugira UMA próxima ação comercial concreta e específica que o vendedor deveria tomar agora, em 1-2 frases, em português.\n\n${contexto}`;
 
   try {
-    const model = genAI.getGenerativeModel({ model: "gemini-2.0-flash" });
+    const model = genAI.getGenerativeModel({ model: "gemini-3.6-flash" });
     const result = await model.generateContent(prompt);
     const texto = result.response.text().trim();
     return NextResponse.json({ texto });

@@ -43,10 +43,11 @@ export async function POST(req: Request) {
 
   if (lead.observacoes?.trim()) {
     try {
-      const model = genAI.getGenerativeModel({
-        model: "gemini-2.0-flash",
-        generationConfig: { responseMimeType: "application/json" },
-      });
+    const model = genAI.getGenerativeModel({
+  model: "gemini-3.6-flash",
+  generationConfig: { responseMimeType: "application/json" },
+});
+      
 
       const result = await model.generateContent(
         `Você analisa observações de um vendedor sobre um lead comercial e avalia o quanto ` +
