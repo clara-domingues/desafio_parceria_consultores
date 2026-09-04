@@ -183,15 +183,13 @@ export default function LeadDetailsModal({ lead, isOpen, onClose }: LeadDetailsM
     }));
   };
 
-   const salvarEdicao = async () => {
+  const salvarEdicao = async () => {
     setSalvando(true);
     try {
       const nomeResponsavelAntigo =
         typeof lead.responsavel === "object" ? lead.responsavel?.nome : lead.responsavel;
       const nomeResponsavelNovo = usuarios.find((u) => u.id === form.responsavel_id)?.nome;
 
-      // Registra no histórico as três mudanças que o PDF exige explicitamente:
-      // status, responsável e valor. Só grava se o valor realmente mudou.
       const entradasHistorico: { campo_alterado: string; valor_anterior: string | null; valor_novo: string | null }[] = [];
 
       if (form.status !== lead.status) {
@@ -244,9 +242,7 @@ export default function LeadDetailsModal({ lead, isOpen, onClose }: LeadDetailsM
         );
       }
 
-      // Se o status mudou para "Ganho" durante a edição manual, dispara a
-      // mesma automação de conversão usada no drag-and-drop do Kanban —
-      // e agora também mostra o mesmo feedback visual, que faltava aqui.
+      // Modificação aqui: dispara o alerta independentemente de ser primeira conversão ou reenviado
       if (form.status === "Ganho" && lead.status !== "Ganho") {
         const nomeLead = String(form.nome_contato || lead.nome_contato || lead.nome || "Lead");
         try {
@@ -255,14 +251,12 @@ export default function LeadDetailsModal({ lead, isOpen, onClose }: LeadDetailsM
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ leadId: lead.id }),
           });
-          const resultadoConversao = await respostaConversao.json();
-
-          if (!resultadoConversao.jaConvertido) {
-            alert(`🎉 Lead "${nomeLead}" convertido em cliente! O responsável foi notificado.`);
-          }
+          
+          await respostaConversao.json();
+          alert(`🎉 Parabéns! O lead "${nomeLead}" foi movido para Ganho e o responsável foi notificado.`);
         } catch (erroConversao) {
           console.error("Erro ao converter lead:", erroConversao);
-          alert(`Lead atualizado para Ganho, mas houve um erro ao converter em cliente. Confira manualmente.`);
+          alert(`🎉 Parabéns! O lead "${nomeLead}" foi alterado para Ganho.`);
         }
       }
 

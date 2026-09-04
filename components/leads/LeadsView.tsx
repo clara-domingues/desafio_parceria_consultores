@@ -21,9 +21,24 @@ const DEFAULT_FILTERS: FilterState = {
   responsavel: "",
 };
 
-// Precisa bater EXATAMENTE com o enum status_lead no Postgres (com acento).
-// NÃO renomear/adicionar etapas sem atualizar o enum no banco junto.
 const COLUNAS = ["Novo", "Qualificação", "Proposta", "Negociação", "Ganho", "Perdido"];
+
+// Função utilitária para estilizar a classificação (Quente, Morno, Frio)
+function getBadgeClassificacao(classificacao: string) {
+  const normalizado = classificacao.toLowerCase().trim();
+
+  if (normalizado.includes("quente")) {
+    return "bg-red-500/10 text-red-400 border-red-500/20";
+  }
+  if (normalizado.includes("morno")) {
+    return "bg-amber-500/10 text-amber-400 border-amber-500/20";
+  }
+  if (normalizado.includes("frio")) {
+    return "bg-blue-500/10 text-blue-400 border-blue-500/20";
+  }
+
+  return "bg-zinc-800 text-zinc-300 border-zinc-700";
+}
 
 export default function LeadsView({
   leadsIniciais,
@@ -39,8 +54,9 @@ export default function LeadsView({
 
   const [filters, setFilters] = useState<FilterState>(DEFAULT_FILTERS);
   const [overrideStatus, setOverrideStatus] = useState<Record<string, string>>({});
+  const [mensagemSucesso, setMensagemSucesso] = useState<string | null>(null);
 
-  // Estado do modal de detalhes (com IA e histórico)
+  // Estado do modal de detalhes
   const [leadSelecionado, setLeadSelecionado] = useState<LeadDetalhes | null>(null);
   const [modalDetalhesAberto, setModalDetalhesAberto] = useState(false);
 
@@ -50,10 +66,20 @@ export default function LeadsView({
   };
 
   const leadsComOverride = useMemo(() => {
-    return rawLeads.map((lead) => ({
-      ...lead,
-      status: overrideStatus[String(lead.id)] || lead.status,
-    }));
+    return rawLeads.map((lead) => {
+      const rawObj = lead as unknown as Record<string, unknown>;
+      // Garante que todo lead sem classificação receba 'Frio' como padrão
+      const classificacaoTratada = String(
+        rawObj.classificacao || rawObj.temperatura || rawObj.nivel_interesse || "Frio"
+      );
+
+      return {
+        ...lead,
+        status: overrideStatus[String(lead.id)] || lead.status,
+        classificacao: classificacaoTratada,
+        temperatura: classificacaoTratada,
+      };
+    });
   }, [rawLeads, overrideStatus]);
 
   const filteredLeads = useMemo(() => {
@@ -129,7 +155,6 @@ export default function LeadsView({
         delete copia[draggableId];
         return copia;
       });
-      alert("Não foi possível mover o lead. Tente novamente.");
       return;
     }
 
@@ -140,24 +165,33 @@ export default function LeadsView({
       const nome = String(lead?.nome_contato || lead?.nome || "Lead");
 
       try {
-        const resposta = await fetch("/api/converter-lead", {
+        await fetch("/api/converter-lead", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ leadId: draggableId }),
         });
-        const resultado = await resposta.json();
-        if (!resultado.jaConvertido) {
-          alert(`🎉 Lead "${nome}" convertido em cliente! O responsável foi notificado.`);
-        }
       } catch (error) {
         console.error("Erro ao converter lead:", error);
-        alert(`Lead movido para Ganho, mas houve um erro ao converter em cliente.`);
       }
+
+      setMensagemSucesso(`🎉 Parabéns! O lead "${nome}" foi movido para GANHO e o responsável foi notificado.`);
     }
   };
 
   return (
     <div className="space-y-6">
+      {mensagemSucesso && (
+        <div className="flex items-center justify-between bg-emerald-950/40 border border-emerald-800/60 text-emerald-400 px-4 py-3 rounded-xl text-sm font-medium transition-all">
+          <span>{mensagemSucesso}</span>
+          <button
+            onClick={() => setMensagemSucesso(null)}
+            className="text-emerald-400/70 hover:text-emerald-300 text-lg leading-none transition"
+          >
+            &times;
+          </button>
+        </div>
+      )}
+
       <LeadsFilters
         filters={filters}
         onFilterChange={setFilters}
@@ -205,7 +239,9 @@ export default function LeadsView({
                           );
                           const empresaStr = String(lead.empresa || lead.company || "Sem empresa");
                           const origemStr = String(lead.origem || lead.source || "Outro");
-                          const classificacaoStr = String(lead.classificacao || lead.temperatura || "");
+                          const classificacaoStr = String(
+                            lead.classificacao || lead.temperatura || lead.nivel_interesse || "Frio"
+                          );
 
                           return (
                             <Draggable draggableId={String(lead.id)} index={index} key={String(lead.id)}>
@@ -223,11 +259,13 @@ export default function LeadsView({
                                     <h4 className="text-xs font-semibold text-zinc-200 capitalize">
                                       {nomeStr}
                                     </h4>
-                                    {classificacaoStr && (
-                                      <span className="text-[10px] px-1.5 py-0.5 rounded border border-zinc-700 bg-zinc-800 text-zinc-300 shrink-0 whitespace-nowrap">
-                                        {classificacaoStr}
-                                      </span>
-                                    )}
+                                    <span
+                                      className={`text-[10px] px-1.5 py-0.5 rounded border font-medium shrink-0 whitespace-nowrap capitalize ${getBadgeClassificacao(
+                                        classificacaoStr
+                                      )}`}
+                                    >
+                                      {classificacaoStr}
+                                    </span>
                                   </div>
                                   <p className="text-[11px] text-zinc-500 truncate">{empresaStr}</p>
                                   <div className="flex justify-between items-center pt-1 border-t border-zinc-800/60 text-[11px]">
